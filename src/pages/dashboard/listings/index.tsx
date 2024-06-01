@@ -52,12 +52,13 @@ import { FiMoreVertical } from 'react-icons/fi';
 
 import { LoadingSection } from '@/components/shared/LoadingSection';
 import { tokenList } from '@/constants/index';
+import { useListingFormStore } from '@/features/listing-builder';
 import {
   type BountyWithSubmissions,
   formatDeadline,
   getBountyStatus,
-  getBountyTypeLabel,
   getColorStyles,
+  getListingTypeLabel,
   isDeadlineOver,
 } from '@/features/listings';
 import { CreateListingModal, SponsorPrize } from '@/features/sponsor-dashboard';
@@ -171,6 +172,8 @@ function Bounties() {
     setBounty(deleteBounty);
     deleteDraftOnOpen();
   };
+
+  const { resetForm } = useListingFormStore();
 
   const {
     isOpen: isOpenCreateListing,
@@ -391,7 +394,7 @@ function Bounties() {
               </Thead>
               <Tbody w="full">
                 {bounties.map((currentBounty) => {
-                  const bountyType = getBountyTypeLabel(
+                  const bountyType = getListingTypeLabel(
                     currentBounty?.type ?? 'bounty',
                   );
 
@@ -593,6 +596,7 @@ function Bounties() {
                                 as={NextLink}
                                 _hover={{ textDecoration: 'none' }}
                                 href={`/dashboard/listings/${currentBounty.slug}/edit`}
+                                onClick={resetForm}
                               >
                                 <MenuItem
                                   py={2}
@@ -611,21 +615,24 @@ function Bounties() {
                               <></>
                             )}
 
-                            <MenuItem
-                              py={2}
-                              color={'brand.slate.500'}
-                              fontSize={'sm'}
-                              fontWeight={500}
-                              icon={<CopyIcon h={4} w={4} />}
-                              onClick={() =>
-                                window.open(
-                                  `${router.basePath}/dashboard/listings/${currentBounty.slug}/duplicate`,
-                                  '_blank',
-                                )
-                              }
-                            >
-                              Duplicate
-                            </MenuItem>
+                            {(currentBounty.type === 'bounty' ||
+                              currentBounty.type === 'project') && (
+                              <MenuItem
+                                py={2}
+                                color={'brand.slate.500'}
+                                fontSize={'sm'}
+                                fontWeight={500}
+                                icon={<CopyIcon h={4} w={4} />}
+                                onClick={() =>
+                                  window.open(
+                                    `${router.basePath}/dashboard/listings/${currentBounty.slug}/duplicate`,
+                                    '_blank',
+                                  )
+                                }
+                              >
+                                Duplicate
+                              </MenuItem>
+                            )}
                             {bountyStatus === 'Draft' && (
                               <>
                                 <MenuItem

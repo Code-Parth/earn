@@ -9,7 +9,6 @@ import {
   useMediaQuery,
   VStack,
 } from '@chakra-ui/react';
-import type { User } from '@prisma/client';
 import axios from 'axios';
 import { useRouter } from 'next/router';
 import React, { useEffect, useState } from 'react';
@@ -26,7 +25,7 @@ import type { Bounty } from '../../types';
 interface Props {
   bounty: Bounty;
   submission?: SubmissionWithUser;
-  user: User;
+  user: IUser;
   link: string;
 }
 export const SubmissionPage = ({ bounty, submission, user, link }: Props) => {
@@ -38,7 +37,7 @@ export const SubmissionPage = ({ bounty, submission, user, link }: Props) => {
     const fetchImage = async () => {
       if (link) {
         try {
-          const { data } = (await axios.post('/api/og', {
+          const { data } = (await axios.post('/api/og/get', {
             url: link,
           })) as { data: Metadata };
           setImage(data.open_graph.images![0]?.url ?? '/assets/bg/og.svg');
@@ -57,7 +56,7 @@ export const SubmissionPage = ({ bounty, submission, user, link }: Props) => {
       flexDir={['column', 'column', 'row', 'row']}
       gap={4}
       w="full"
-      maxW={'7xl'}
+      maxW={'8xl'}
       mx={'auto'}
     >
       <VStack gap={3} w={'full'} mt={3}>

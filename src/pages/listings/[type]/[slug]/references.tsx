@@ -18,7 +18,6 @@ const ReferenceCard = ({ link }: { link: string }) => {
   return (
     <Box
       w="100%"
-      // h={'100%'}
       borderWidth="2px"
       borderColor={'gray.200'}
       borderRadius={8}
@@ -96,7 +95,7 @@ function BountyDetails({ bounty: initialBounty }: BountyDetailsProps) {
                   ]}
                   flexDir={['column', 'column', 'row', 'row']}
                   gap={4}
-                  maxW={'7xl'}
+                  maxW={'8xl'}
                   mx={'auto'}
                   mt={6}
                   mb={10}

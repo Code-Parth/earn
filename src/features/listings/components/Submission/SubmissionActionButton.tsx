@@ -1,6 +1,7 @@
 import { Button, Flex, Tooltip, useDisclosure } from '@chakra-ui/react';
 import axios from 'axios';
 import Image from 'next/image';
+import { useSession } from 'next-auth/react';
 import React, {
   type Dispatch,
   type SetStateAction,
@@ -10,9 +11,9 @@ import React, {
 
 import { SurveyModal } from '@/components/Survey';
 import { Superteams } from '@/constants/Superteam';
-import { LoginWrapper } from '@/features/auth';
+import { AuthWrapper } from '@/features/auth';
 import {
-  getBountyDraftStatus,
+  getListingDraftStatus,
   getRegionTooltipLabel,
   isDeadlineOver,
 } from '@/features/listings';
@@ -47,7 +48,6 @@ export const SubmissionActionButton = ({
     isWinnersAnnounced,
   } = listing;
 
-  const [triggerLogin, setTriggerLogin] = useState(false);
   const [isUserSubmissionLoading, setIsUserSubmissionLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isEasterEggOpen, setEasterEggOpen] = useState(false);
@@ -81,19 +81,19 @@ export const SubmissionActionButton = ({
 
   const regionTooltipLabel = getRegionTooltipLabel(region);
 
-  const bountyDraftStatus = getBountyDraftStatus(status, isPublished);
+  const bountyDraftStatus = getListingDraftStatus(status, isPublished);
 
   const handleSubmit = () => {
-    if (applicationLink) {
-      window.open(applicationLink, '_blank');
-      return;
-    }
-    if (!userInfo?.id) {
-      setTriggerLogin(true);
-    } else if (!userInfo?.isTalentFilled) {
-      warningOnOpen();
-    } else {
-      onOpen();
+    if (isAuthenticated) {
+      if (applicationLink) {
+        window.open(applicationLink, '_blank');
+        return;
+      }
+      if (!userInfo?.isTalentFilled) {
+        warningOnOpen();
+      } else {
+        onOpen();
+      }
     }
   };
 
@@ -170,6 +170,10 @@ export const SubmissionActionButton = ({
 
   const surveyId = '018c6743-c893-0000-a90e-f35d31c16692';
 
+  const { status: authStatus } = useSession();
+
+  const isAuthenticated = authStatus === 'authenticated';
+
   return (
     <>
       {isOpen && (
@@ -233,11 +237,6 @@ export const SubmissionActionButton = ({
         loading="eager"
         quality={80}
       />
-
-      <LoginWrapper
-        triggerLogin={triggerLogin}
-        setTriggerLogin={setTriggerLogin}
-      />
       <Tooltip
         bg="brand.slate.500"
         hasArrow
@@ -261,24 +260,26 @@ export const SubmissionActionButton = ({
           bg="white"
           transform={{ base: 'translateX(-50%)', md: 'none' }}
         >
-          <Button
-            w={'full'}
-            mb={{ base: 0, md: 5 }}
-            bg={buttonBG}
-            _hover={{ bg: buttonBG }}
-            _disabled={{
-              opacity: { base: '96%', md: '70%' },
-            }}
-            pointerEvents={btnPointerEvents}
-            isDisabled={isBtnDisabled}
-            isLoading={isUserSubmissionLoading}
-            loadingText={btnLoadingText}
-            onClick={handleSubmit}
-            size="lg"
-            variant="solid"
-          >
-            {buttonText}
-          </Button>
+          <AuthWrapper style={{ w: 'full' }}>
+            <Button
+              w={'full'}
+              mb={{ base: 0, md: 5 }}
+              bg={buttonBG}
+              _hover={{ bg: buttonBG }}
+              _disabled={{
+                opacity: { base: '96%', md: '70%' },
+              }}
+              pointerEvents={btnPointerEvents}
+              isDisabled={isBtnDisabled}
+              isLoading={isUserSubmissionLoading}
+              loadingText={btnLoadingText}
+              onClick={handleSubmit}
+              size="lg"
+              variant="solid"
+            >
+              {buttonText}
+            </Button>
+          </AuthWrapper>
         </Flex>
       </Tooltip>
     </>

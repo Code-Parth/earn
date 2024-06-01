@@ -10,7 +10,7 @@ import { Comments } from '@/features/comments';
 import {
   type Bounty,
   DescriptionUI,
-  getBountyTypeLabel,
+  getListingTypeLabel,
   ListingHeader,
   ListingWinners,
   RightSideBar,
@@ -68,7 +68,7 @@ function BountyDetails({ bounty: initialBounty }: BountyDetailsProps) {
           } by ${initialBounty?.sponsor?.name}`}</title>
           <meta
             name="description"
-            content={`${getBountyTypeLabel(initialBounty?.type ?? 'Bounty')} on Superteam Earn | ${
+            content={`${getListingTypeLabel(initialBounty?.type ?? 'Bounty')} on Superteam Earn | ${
               initialBounty?.sponsor?.name
             } is seeking freelancers and builders ${
               initialBounty?.title
@@ -124,7 +124,7 @@ function BountyDetails({ bounty: initialBounty }: BountyDetailsProps) {
                 justify={['center', 'center', 'space-between', 'space-between']}
                 flexDir={{ base: 'column-reverse', md: 'row' }}
                 gap={4}
-                maxW={'7xl'}
+                maxW={'8xl'}
                 mx={'auto'}
                 mb={10}
                 px={3}

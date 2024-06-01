@@ -202,7 +202,7 @@ export const SubmissionModal = ({
       }
 
       const latestSubmissionNumber = (userInfo?.Submission?.length ?? 0) + 1;
-      if (!editMode && latestSubmissionNumber % 3 === 0) showEasterEgg();
+      if (!editMode) showEasterEgg();
       if (!editMode && latestSubmissionNumber % 3 !== 0) onSurveyOpen();
 
       reset();
@@ -281,21 +281,22 @@ export const SubmissionModal = ({
     >
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader color="brand.slate.800">{headerText}</ModalHeader>
-        <ModalCloseButton />
+        <ModalHeader px={{ base: 4, md: 10 }} pt={8} color="brand.slate.800">
+          {headerText}
+          <Text mt={1} color={'brand.slate.500'} fontSize="sm" fontWeight={400}>
+            {subheadingText}
+          </Text>
+        </ModalHeader>
+        <ModalCloseButton mt={5} />
         <VStack
           align={'start'}
           gap={3}
-          overflow={'scroll'}
+          overflowY={'auto'}
           maxH={'50rem'}
-          px={6}
-          pb={6}
+          px={{ base: 4, md: 10 }}
+          pb={10}
         >
-          <Box>
-            <Text mb={1} color={'brand.slate.500'} fontSize="sm">
-              {subheadingText}
-            </Text>
-          </Box>
+          <Box></Box>
           <form
             style={{ width: '100%' }}
             onSubmit={handleSubmit((e) => {

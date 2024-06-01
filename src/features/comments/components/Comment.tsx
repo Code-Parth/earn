@@ -26,10 +26,11 @@ import {
 import axios from 'axios';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 
-import { UserAvatar } from '@/components/shared/UserAvatar';
-import { LoginWrapper } from '@/features/auth';
+import { EarnAvatar } from '@/components/shared/EarnAvatar';
+import { AuthWrapper } from '@/features/auth';
 import { type Comment as IComment } from '@/interface/comments';
 import { type User } from '@/interface/user';
 import { userStore } from '@/store/user';
@@ -78,7 +79,6 @@ export const Comment = ({
     onOpen: deleteOnOpen,
     onClose: deleteOnClose,
   } = useDisclosure();
-  const [triggerLogin, setTriggerLogin] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [showReplies, setShowReplies] = useState(false);
   const [replies, setReplies] = useState(comment?.replies ?? []);
@@ -89,6 +89,10 @@ export const Comment = ({
   const [deleteError, setDeleteError] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const cancelRef = useRef<any>(null);
+
+  const { status } = useSession();
+
+  const isAuthenticated = status === 'authenticated';
 
   useEffect(() => {
     const reply = localStorage.getItem(`comment-${refId}-${comment.id}`);
@@ -145,28 +149,28 @@ export const Comment = ({
   const date = formatFromNow(dayjs(comment?.updatedAt).fromNow());
 
   const handleSubmit = async () => {
-    if (!userInfo?.id) {
-      setTriggerLogin(true);
-    } else if (!userInfo?.isTalentFilled && !userInfo?.currentSponsorId) {
-      onOpen();
-    } else {
-      try {
-        setNewReplyLoading(true);
-        setNewReplyError(false);
+    if (isAuthenticated) {
+      if (!userInfo?.isTalentFilled && !userInfo?.currentSponsorId) {
+        onOpen();
+      } else {
+        try {
+          setNewReplyLoading(true);
+          setNewReplyError(false);
 
-        if (addNewReply) {
-          await addNewReply(newReply);
-        } else {
-          await addNewReplyLvl1(newReply);
+          if (addNewReply) {
+            await addNewReply(newReply);
+          } else {
+            await addNewReplyLvl1(newReply);
+          }
+
+          setNewReply('');
+          setNewReplyLoading(false);
+          setShowReplyInput(false);
+        } catch (e) {
+          console.log('error - ', e);
+          setNewReplyError(true);
+          setNewReplyLoading(false);
         }
-
-        setNewReply('');
-        setNewReplyLoading(false);
-        setShowReplyInput(false);
-      } catch (e) {
-        console.log('error - ', e);
-        setNewReplyError(true);
-        setNewReplyLoading(false);
       }
     }
   };
@@ -191,10 +195,6 @@ export const Comment = ({
           primaryCtaLink={'/new/talent'}
         />
       )}
-      <LoginWrapper
-        triggerLogin={triggerLogin}
-        setTriggerLogin={setTriggerLogin}
-      />
       <HStack
         key={comment.id}
         align="start"
@@ -218,7 +218,11 @@ export const Comment = ({
             maxWidth: isReply ? '28px' : '36px',
           }}
         >
-          <UserAvatar size={isReply ? '28px' : '36px'} user={comment?.author} />
+          <EarnAvatar
+            size={isReply ? '28px' : '36px'}
+            id={comment?.author?.id}
+            avatar={comment?.author?.photo}
+          />
         </Link>
 
         <VStack align={'start'} gap={0} w="100%">
@@ -350,7 +354,11 @@ export const Comment = ({
           >
             <VStack gap={4} w={'full'} mb={4} pt={4}>
               <Flex gap={3} w="full">
-                <UserAvatar user={userInfo} size="28px" />
+                <EarnAvatar
+                  size={'28px'}
+                  id={userInfo?.id}
+                  avatar={userInfo?.photo}
+                />
                 <UserSuggestionTextarea
                   autoFocusOn={showReplyInput}
                   defaultSuggestions={defaultSuggestions}
@@ -382,29 +390,31 @@ export const Comment = ({
                 unmountOnExit={true}
               >
                 <Flex justify={'end'} gap={4} w="full">
-                  <Button
-                    h="auto"
-                    px={5}
-                    py={2}
-                    color="brand.slate.800"
-                    fontSize={{
-                      base: 'xs',
-                    }}
-                    fontWeight={500}
-                    bg="brand.slate.200"
-                    _hover={{
-                      bg: 'brand.slate.300',
-                    }}
-                    _active={{
-                      bg: 'brand.slate.400',
-                    }}
-                    isDisabled={!!newReplyLoading || !newReply}
-                    isLoading={!!newReplyLoading}
-                    loadingText="Adding..."
-                    onClick={() => handleSubmit()}
-                  >
-                    Reply
-                  </Button>
+                  <AuthWrapper>
+                    <Button
+                      h="auto"
+                      px={5}
+                      py={2}
+                      color="brand.slate.800"
+                      fontSize={{
+                        base: 'xs',
+                      }}
+                      fontWeight={500}
+                      bg="brand.slate.200"
+                      _hover={{
+                        bg: 'brand.slate.300',
+                      }}
+                      _active={{
+                        bg: 'brand.slate.400',
+                      }}
+                      isDisabled={!!newReplyLoading || !newReply}
+                      isLoading={!!newReplyLoading}
+                      loadingText="Adding..."
+                      onClick={() => handleSubmit()}
+                    >
+                      Reply
+                    </Button>
+                  </AuthWrapper>
                 </Flex>
               </Collapse>
             </VStack>
