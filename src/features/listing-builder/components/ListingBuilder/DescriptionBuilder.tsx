@@ -23,6 +23,7 @@ import TextStyle from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { usePostHog } from 'posthog-js/react';
 import React, {
   type Dispatch,
   type SetStateAction,
@@ -113,14 +114,15 @@ export const DescriptionBuilder = ({
 }: Props) => {
   const { form, updateState } = useListingFormStore();
 
-  const { register, control, handleSubmit, watch, setValue, reset } = useForm({
-    mode: 'onBlur',
-    defaultValues: {
-      description: form?.description,
-      requirements: form?.requirements,
-      references: form?.references,
-    },
-  });
+  const { register, control, handleSubmit, watch, setValue, reset, getValues } =
+    useForm({
+      mode: 'onBlur',
+      defaultValues: {
+        description: form?.description,
+        requirements: form?.requirements,
+        references: form?.references,
+      },
+    });
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -144,8 +146,11 @@ export const DescriptionBuilder = ({
           link: e.link,
         })),
       });
+      if (editor && form?.description) {
+        editor.commands.setContent(form?.description);
+      }
     }
-  }, [form]);
+  }, [form, editable]);
 
   const editor = useEditor({
     extensions: [
@@ -255,13 +260,22 @@ export const DescriptionBuilder = ({
       setEditorError(true);
       return;
     }
+    posthog.capture('description_sponsor');
     setSteps(4);
   };
 
-  const onDraftClick = async (data: any) => {
+  const onDraftClick = async () => {
+    const data = getValues();
     const formData = { ...form, ...data };
+    if (isNewOrDraft || isDuplicating) {
+      posthog.capture('save draft_sponsor');
+    } else {
+      posthog.capture('edit listing_sponsor');
+    }
     createDraft(formData);
   };
+
+  const posthog = usePostHog();
 
   return (
     <>
@@ -320,6 +334,7 @@ export const DescriptionBuilder = ({
             <ListingTooltip label="Write details about the Listing - About, Requirements, Evaluation Criteria, Resources, Rewards, etc." />
           </Flex>
           <ChakraLink
+            className="ph-no-capture"
             gap={1}
             display="flex"
             color="brand.slate.400"
@@ -329,6 +344,9 @@ export const DescriptionBuilder = ({
               color: 'brand.slate.500',
             }}
             href="https://chat.openai.com/g/g-HS6eWTMku-st-earn-listings-bot"
+            onClick={() => {
+              posthog.capture('chatGPT bot_sponsor');
+            }}
             target="_blank"
           >
             <Text textDecoration="none">🤖</Text>
@@ -505,7 +523,6 @@ export const DescriptionBuilder = ({
             <div style={{ height: '100% !important' }} className="reset">
               <EditorContent
                 id="reset-des"
-                style={{}}
                 width={'100%'}
                 height={'100%'}
                 editor={editor}
@@ -580,10 +597,11 @@ export const DescriptionBuilder = ({
             Continue
           </Button>
           <Button
+            className="ph-no-capture"
             w="100%"
             isDisabled={!description}
             isLoading={isDraftLoading}
-            onClick={handleSubmit(onDraftClick)}
+            onClick={onDraftClick}
             variant="outline"
           >
             {isNewOrDraft || isDuplicating ? 'Save Draft' : 'Update Listing'}

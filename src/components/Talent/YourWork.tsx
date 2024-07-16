@@ -10,6 +10,7 @@ import {
   Select,
   Tooltip,
 } from '@chakra-ui/react';
+import { usePostHog } from 'posthog-js/react';
 import { type Dispatch, type SetStateAction, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import ReactSelect from 'react-select';
@@ -24,7 +25,7 @@ import {
   workExp,
   workType,
 } from '@/constants';
-import { SkillList, type SubSkillsType } from '@/interface/skills';
+import { skillSubSkillMap, type SubSkillsType } from '@/interface/skills';
 
 import type { UserStoreType } from './types';
 
@@ -46,6 +47,7 @@ export function YourWork({ setStep, useFormStore }: Step1Props) {
 
   const { updateState } = useFormStore();
   const { form } = useFormStore();
+  const posthog = usePostHog();
 
   const [post, setPost] = useState(false);
 
@@ -56,7 +58,7 @@ export function YourWork({ setStep, useFormStore }: Step1Props) {
       currentEmployer: form.currentEmployer,
       community: form.community,
       workPrefernce: form.workPrefernce,
-      private: form.private || false,
+      isPrivate: form.isPrivate || false,
     },
   });
 
@@ -70,25 +72,25 @@ export function YourWork({ setStep, useFormStore }: Step1Props) {
     ) {
       return false;
     }
+    posthog.capture('your work_talent');
     updateState({
       ...data,
       skills: skills.map((mainskill) => {
-        const main = SkillList.find(
-          (skill) => skill.mainskill === mainskill.value,
-        );
+        const main =
+          skillSubSkillMap[mainskill.value as keyof typeof skillSubSkillMap];
         const sub: SubSkillsType[] = [];
 
         subSkills.forEach((subskill) => {
           if (
             main &&
-            main.subskills.includes(subskill.value as SubSkillsType)
+            main.some((subSkillObj) => subSkillObj.value === subskill.value)
           ) {
             sub.push(subskill.value as SubSkillsType);
           }
         });
 
         return {
-          skills: main?.mainskill ?? '',
+          skills: mainskill.value,
           subskills: sub ?? [],
         };
       }),
@@ -196,6 +198,7 @@ export function YourWork({ setStep, useFormStore }: Step1Props) {
               id="currentEmployer"
               placeholder="Current Employer"
               {...register('currentEmployer', { required: true })}
+              maxLength={100}
             />
           </Box>
           <Box w={'full'} mb={'1.25rem'}>
@@ -287,7 +290,7 @@ export function YourWork({ setStep, useFormStore }: Step1Props) {
                 fontWeight={500}
                 colorScheme="purple"
                 size="md"
-                {...register('private')}
+                {...register('isPrivate')}
               >
                 Keep my info private
               </Checkbox>
@@ -308,6 +311,7 @@ export function YourWork({ setStep, useFormStore }: Step1Props) {
             </FormControl>
           </Flex>
           <Button
+            className="ph-no-capture"
             w={'full'}
             h="50px"
             color={'white'}

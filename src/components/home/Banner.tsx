@@ -10,6 +10,7 @@ import {
 } from '@chakra-ui/react';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import React from 'react';
 
 import { AuthWrapper } from '@/features/auth';
@@ -22,16 +23,16 @@ interface BannerProps {
 
 const avatars = [
   {
-    name: 'Anoushk',
-    src: 'https://res.cloudinary.com/dgvnuwspr/image/upload/c_scale,w_30,h_30,f_auto/v1683132586/People%20DPs/recA3Sa7t1loYvDHo.jpg',
+    name: 'Abhishkek',
+    src: '/assets/pfps/t1.png',
   },
   {
-    name: 'Ujjwal',
-    src: 'https://res.cloudinary.com/dgvnuwspr/image/upload/c_scale,w_30,h_30,f_auto/v1683135404/People%20DPs/rec4XUFtbh6upVYpA.jpg',
+    name: 'Pratik',
+    src: '/assets/pfps/md2.png',
   },
   {
     name: 'Yash',
-    src: 'https://res.cloudinary.com/dgvnuwspr/image/upload/c_scale,w_30,h_30,f_auto/v1683135395/People%20DPs/recb4gDjdKoFDAyo7.png',
+    src: '/assets/pfps/fff1.png',
   },
 ];
 
@@ -39,6 +40,7 @@ export function HomeBanner({ userCount }: BannerProps) {
   const [isLessThan768px] = useMediaQuery('(max-width: 768px)');
 
   const { data: session, status } = useSession();
+  const posthog = usePostHog();
 
   if (!session && status === 'loading') {
     return (
@@ -88,19 +90,20 @@ export function HomeBanner({ userCount }: BannerProps) {
           fontWeight={'700'}
           lineHeight={'120%'}
         >
-          Unlock your crypto
-          <br /> earning potential
+          Find Your Next High
+          <br /> Paying Crypto Gig
         </Text>
         <Text
           pos="relative"
           zIndex={1}
-          maxW={{ base: '100%', md: '460px' }}
+          maxW={{ base: '100%', md: '30rem' }}
           mt={isLessThan768px ? '2.5' : '4'}
           color={'white'}
           fontSize={{ base: '13px', md: 'lg' }}
+          lineHeight={'130%'}
         >
-          Explore bounties, projects, and grant opportunities for developers and
-          non-technical talent alike
+          Participate in bounties or apply to freelance gigs of world-class
+          crypto companies, all with a single profile.
         </Text>
         <Flex
           zIndex={1}
@@ -111,12 +114,16 @@ export function HomeBanner({ userCount }: BannerProps) {
         >
           <AuthWrapper style={{ w: isLessThan768px ? '100%' : 'auto' }}>
             <Button
+              className="ph-no-capture"
               w={isLessThan768px ? '100%' : 'auto'}
               px={'2.25rem'}
               py={'0.75rem'}
               color={'#3223A0'}
               fontSize={'0.875rem'}
               bg={'white'}
+              onClick={() => {
+                posthog.capture('signup_banner');
+              }}
             >
               Sign Up
             </Button>

@@ -2,22 +2,29 @@ import { Regions } from '@prisma/client';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { Superteams } from '@/constants/Superteam';
+import logger from '@/lib/logger';
 import { prisma } from '@/prisma';
+import { safeStringify } from '@/utils/safeStringify';
 
 export default async function user(req: NextApiRequest, res: NextApiResponse) {
   const params = req.query;
   const region = params.region as string;
   const take = params.take ? parseInt(params.take as string, 10) : 30;
 
+  logger.debug(`Request query: ${safeStringify(req.query)}`);
+
   const st = Superteams.find((team) => team.region.toLowerCase() === region);
   const superteam = st?.name;
 
-  const result: any = {
+  logger.debug(`Superteam for region ${region}: ${superteam}`);
+
+  const result: { bounties: any[]; grants: any[] } = {
     bounties: [],
     grants: [],
   };
 
   try {
+    logger.debug('Fetching bounties');
     const bounties = await prisma.bounties.findMany({
       where: {
         isPublished: true,
@@ -54,6 +61,7 @@ export default async function user(req: NextApiRequest, res: NextApiResponse) {
     });
     result.bounties = bounties;
 
+    logger.debug('Fetching grants');
     const grants = await prisma.grants.findMany({
       where: {
         isPublished: true,
@@ -66,14 +74,7 @@ export default async function user(req: NextApiRequest, res: NextApiResponse) {
       orderBy: {
         updatedAt: 'desc',
       },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        shortDescription: true,
-        token: true,
-        rewardAmount: true,
-        link: true,
+      include: {
         sponsor: {
           select: {
             id: true,
@@ -82,17 +83,28 @@ export default async function user(req: NextApiRequest, res: NextApiResponse) {
             logo: true,
           },
         },
+        _count: {
+          select: {
+            GrantApplication: {
+              where: {
+                applicationStatus: 'Approved',
+              },
+            },
+          },
+        },
       },
     });
 
     result.grants = grants;
 
-    res.status(200).json(result);
-  } catch (error) {
-    console.log(error);
-
-    res.status(400).json({
-      error,
+    logger.info(`Successfully fetched listings for region=${region}`);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    logger.error(
+      `Error fetching listings for region=${region}: ${safeStringify(error)}`,
+    );
+    return res.status(500).json({
+      error: 'Internal server error',
       message: 'Error occurred while fetching listings',
     });
   }

@@ -8,16 +8,19 @@ import {
   SkeletonCircle,
   SkeletonText,
   Text,
+  useBreakpointValue,
 } from '@chakra-ui/react';
 import { franc } from 'franc';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
+import { IoIosStar } from 'react-icons/io';
+import { MdModeComment } from 'react-icons/md';
 
 import { tokenList } from '@/constants';
 import { dayjs } from '@/utils/dayjs';
 import { timeAgoShort } from '@/utils/timeAgo';
 
-import type { Bounty } from '../types';
+import { type Listing } from '../types';
 import { CompensationAmount } from './ListingPage/CompensationAmount';
 
 export const ListingCardSkeleton = () => {
@@ -66,7 +69,7 @@ export const ListingCard = ({
   bounty,
   checkLanguage = false,
 }: {
-  bounty: Bounty;
+  bounty: Listing;
   checkLanguage?: boolean;
 }) => {
   const {
@@ -79,15 +82,19 @@ export const ListingCard = ({
     slug,
     applicationType,
     isWinnersAnnounced,
+    isFeatured,
     description,
     compensationType,
     minRewardAsk,
     maxRewardAsk,
     winnersAnnouncedAt,
+    _count,
   } = bounty;
 
   const router = useRouter();
   const isBounty = type === 'bounty';
+
+  const isSM = useBreakpointValue({ base: false, sm: true });
 
   if (checkLanguage) {
     const langCode = franc(description);
@@ -107,7 +114,9 @@ export const ListingCard = ({
   if (isBeforeDeadline) {
     deadlineText =
       applicationType === 'rolling'
-        ? 'Rolling Deadline'
+        ? isSM
+          ? 'Rolling Deadline'
+          : 'Rolling'
         : `Due in ${formattedDeadline}`;
   } else {
     deadlineText = isWinnersAnnounced
@@ -127,6 +136,7 @@ export const ListingCard = ({
       w="full"
       px={{ base: 2, sm: 4 }}
       py={4}
+      bg={isFeatured && isBeforeDeadline ? '#FAF5FF' : 'white'}
       borderRadius={5}
       _hover={{ textDecoration: 'none', bg: 'gray.100' }}
       href={`/listings/${type}/${slug}`}
@@ -185,19 +195,18 @@ export const ListingCard = ({
                     />
                   )}
                   <Flex align="baseline">
-                    <Text
-                      color="brand.slate.600"
-                      fontSize="xs"
-                      fontWeight="600"
-                      whiteSpace="nowrap"
-                    >
-                      <CompensationAmount
-                        compensationType={compensationType}
-                        maxRewardAsk={maxRewardAsk}
-                        minRewardAsk={minRewardAsk}
-                        rewardAmount={rewardAmount}
-                      />
-                    </Text>
+                    <CompensationAmount
+                      compensationType={compensationType}
+                      maxRewardAsk={maxRewardAsk}
+                      minRewardAsk={minRewardAsk}
+                      rewardAmount={rewardAmount}
+                      textStyle={{
+                        color: 'brand.slate.600',
+                        fontSize: ['xs', 'xs', 'md', 'md'],
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}
+                    />
                     {compensationType !== 'variable' && (
                       <Text color="gray.400" fontSize="xs" fontWeight={500}>
                         {token}
@@ -220,7 +229,7 @@ export const ListingCard = ({
                   }
                 />
                 <Text
-                  display="flex"
+                  display={{ base: 'none', sm: 'flex' }}
                   ml={{ base: -1, sm: isBounty ? '-3' : '-2.5' }}
                   color="gray.500"
                   fontSize={['x-small', 'xs', 'xs', 'xs']}
@@ -244,10 +253,54 @@ export const ListingCard = ({
                 >
                   {deadlineText}
                 </Text>
-                {dayjs().isBefore(dayjs(deadline)) && !isWinnersAnnounced && (
-                  <Circle bg="#16A35F" size="8px" />
-                )}
               </Flex>
+              <Text
+                display={{ base: 'none', sm: 'flex' }}
+                color="brand.slate.300"
+                fontSize={['xx-small', 'xs', 'sm', 'sm']}
+              >
+                |
+              </Text>
+              {!!_count?.Comments && _count?.Comments > 0 && (
+                <Flex
+                  align="center"
+                  gap={0.5}
+                  display={{ base: 'none', sm: 'flex' }}
+                  mx={{ base: 1, sm: 0 }}
+                  color="gray.500"
+                  fontSize={['x-small', 'xs', 'xs', 'xs']}
+                >
+                  <MdModeComment
+                    style={{
+                      color: 'var(--chakra-colors-brand-slate-500)',
+                      width: '0.8rem',
+                    }}
+                  />
+                  <Text>{_count?.Comments}</Text>
+                </Flex>
+              )}
+              {!!isFeatured && isBeforeDeadline && (
+                <Flex
+                  align="center"
+                  gap={1}
+                  mx={{ base: 1, sm: 0 }}
+                  color="#7C3AED"
+                  fontSize={['x-small', 'xs', 'xs', 'xs']}
+                >
+                  <IoIosStar />
+                  <Text
+                    display={{ base: 'none', sm: 'flex' }}
+                    pt={0.5}
+                    fontWeight={600}
+                  >
+                    FEATURED
+                  </Text>
+                </Flex>
+              )}
+
+              {dayjs().isBefore(dayjs(deadline)) && !isWinnersAnnounced && (
+                <Circle mx={{ base: 1, sm: 0 }} bg="#16A35F" size="8px" />
+              )}
             </Flex>
           </Flex>
         </Flex>
@@ -269,19 +322,18 @@ export const ListingCard = ({
             />
           )}
           <Flex align="baseline" gap={1}>
-            <Text
-              color="brand.slate.600"
-              fontSize={['xs', 'xs', 'md', 'md']}
-              fontWeight="600"
-              whiteSpace="nowrap"
-            >
-              <CompensationAmount
-                compensationType={compensationType}
-                maxRewardAsk={maxRewardAsk}
-                minRewardAsk={minRewardAsk}
-                rewardAmount={rewardAmount}
-              />
-            </Text>
+            <CompensationAmount
+              compensationType={compensationType}
+              maxRewardAsk={maxRewardAsk}
+              minRewardAsk={minRewardAsk}
+              rewardAmount={rewardAmount}
+              textStyle={{
+                color: 'brand.slate.600',
+                fontSize: ['xs', 'xs', 'md', 'md'],
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}
+            />
             {compensationType !== 'variable' && (
               <Text
                 color="gray.400"
@@ -302,7 +354,7 @@ export const ListingCardMobile = ({
   bounty,
   checkLanguage,
 }: {
-  bounty: Bounty;
+  bounty: Listing;
   checkLanguage?: boolean;
 }) => {
   const {
@@ -336,6 +388,7 @@ export const ListingCardMobile = ({
   return (
     <>
       <Link
+        className="ph-no-capture"
         as={NextLink}
         w="full"
         px={2}
@@ -347,7 +400,12 @@ export const ListingCardMobile = ({
         }}
         href={`/listings/${type}/${slug}`}
       >
-        <Flex align="center" justify="space-between" w={'100%'}>
+        <Flex
+          className="ph-no-capture"
+          align="center"
+          justify="space-between"
+          w={'100%'}
+        >
           <Flex w="100%">
             <Image
               w={14}
@@ -366,6 +424,7 @@ export const ListingCardMobile = ({
             />
             <Flex justify={'space-between'} direction={'column'} w={'full'}>
               <Text
+                className="ph-no-capture"
                 color="brand.slate.700"
                 fontSize={'sm'}
                 fontWeight={600}
@@ -402,19 +461,18 @@ export const ListingCardMobile = ({
                       />
                     )}
                     <Flex align="baseline">
-                      <Text
-                        color={'brand.slate.600'}
-                        fontSize={'xs'}
-                        fontWeight={'600'}
-                        whiteSpace={'nowrap'}
-                      >
-                        <CompensationAmount
-                          compensationType={compensationType}
-                          maxRewardAsk={maxRewardAsk}
-                          minRewardAsk={minRewardAsk}
-                          rewardAmount={rewardAmount}
-                        />
-                      </Text>
+                      <CompensationAmount
+                        compensationType={compensationType}
+                        maxRewardAsk={maxRewardAsk}
+                        minRewardAsk={minRewardAsk}
+                        rewardAmount={rewardAmount}
+                        textStyle={{
+                          color: 'brand.slate.600',
+                          fontSize: 'xs',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                        }}
+                      />
                       {compensationType !== 'variable' && (
                         <Text
                           color={'gray.400'}
@@ -428,7 +486,7 @@ export const ListingCardMobile = ({
                     <Text
                       ml={1}
                       color={'brand.slate.300'}
-                      fontSize={'xx-small'}
+                      fontSize={['xx-small', 'xs', 'sm', 'sm']}
                     >
                       |
                     </Text>
@@ -448,7 +506,7 @@ export const ListingCardMobile = ({
                 <Text
                   display={'flex'}
                   color={'brand.slate.300'}
-                  fontSize={'xx-small'}
+                  fontSize={['xx-small', 'xs', 'sm', 'sm']}
                 >
                   |
                 </Text>

@@ -11,9 +11,11 @@ import {
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
 import { signIn } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import React, { type Dispatch, type SetStateAction, useState } from 'react';
 import { MdOutlineEmail } from 'react-icons/md';
 
+import { TERMS_OF_USE } from '@/constants';
 import { GoogleIcon } from '@/svg/google';
 
 export const SignIn = ({
@@ -26,8 +28,12 @@ export const SignIn = ({
   const [email, setEmail] = useState('');
   const [isEmailValid, setIsEmailValid] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [hasGmail, setHasGmail] = useState(false);
+
+  const [isLoading, setIsLoading] = useState(false);
 
   const router = useRouter();
+  const posthog = usePostHog();
 
   const validateEmail = (emailAddress: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -38,11 +44,18 @@ export const SignIn = ({
     const emailInput = e.target.value;
     setEmail(emailInput);
     setIsEmailValid(validateEmail(emailInput));
+    setHasGmail(emailInput.includes('@gmail.com'));
   };
 
+  const hasGmailAndIsProd =
+    hasGmail && process.env.NEXT_PUBLIC_VERCEL_ENV === 'production';
+
   const handleEmailSignIn = () => {
+    setIsLoading(true);
+
     setHasAttemptedSubmit(true);
-    if (isEmailValid) {
+    if (isEmailValid && !hasGmailAndIsProd) {
+      posthog.capture('email OTP_auth');
       localStorage.setItem('emailForSignIn', email);
       signIn('email', {
         email,
@@ -69,15 +82,17 @@ export const SignIn = ({
                 textAlign="center"
               >
                 <Button
+                  className="ph-no-capture"
                   w="100%"
                   fontSize="17px"
                   fontWeight={500}
                   leftIcon={<GoogleIcon />}
-                  onClick={() =>
+                  onClick={() => {
+                    posthog.capture('google_auth');
                     signIn('google', {
                       callbackUrl: `${router.asPath}?loginState=signedIn`,
-                    })
-                  }
+                    });
+                  }}
                   size="lg"
                 >
                   Continue with Google
@@ -122,16 +137,32 @@ export const SignIn = ({
                   />
                 </FormControl>
                 <Button
+                  className="ph-no-capture"
                   w="100%"
                   h="2.9rem"
                   mt={3}
                   fontSize="17px"
                   fontWeight={500}
+                  cursor={hasGmailAndIsProd ? 'not-allowed' : 'pointer'}
+                  isDisabled={hasGmailAndIsProd || isLoading}
+                  isLoading={isLoading}
                   onClick={handleEmailSignIn}
                   size="lg"
                 >
                   Continue with Email
                 </Button>
+                {hasGmailAndIsProd && (
+                  <Text
+                    align={'center'}
+                    mt={2}
+                    color="red.500"
+                    fontSize={'xs'}
+                    lineHeight={'0.9rem'}
+                  >
+                    Please use the Google Auth login option from the previous
+                    step.
+                  </Text>
+                )}
               </>
             )}
           </Box>
@@ -146,10 +177,11 @@ export const SignIn = ({
             <Link
               as={NextLink}
               fontWeight={600}
-              href={`${router.basePath}/terms-of-service.pdf`}
+              href={TERMS_OF_USE}
               isExternal
+              rel="noopener noreferrer"
             >
-              Terms of Service
+              Terms of Use
             </Link>{' '}
             and our{' '}
             <Link
@@ -174,7 +206,7 @@ export const SignIn = ({
             <Text as="u">
               <Link
                 as={NextLink}
-                href={'mailto:hello@superteamearn.com'}
+                href={'mailto:support@superteamearn.com'}
                 isExternal
               >
                 Click here

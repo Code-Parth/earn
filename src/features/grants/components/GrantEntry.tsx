@@ -1,22 +1,25 @@
 import { Box, Button, Flex, Image, Link, Text } from '@chakra-ui/react';
 import NextLink from 'next/link';
 
+import { grantAmount } from '../utils';
+
 export const GrantEntry = ({
   title,
   shortDescription = '',
-  rewardAmount,
+  minReward,
+  maxReward,
   token,
   slug,
-  link,
   logo,
 }: {
   title: string;
   shortDescription?: string;
   rewardAmount?: number;
   token?: string;
-  link?: string;
   slug: string;
   logo?: string;
+  minReward?: number;
+  maxReward?: number;
 }) => {
   return (
     <Box w={{ base: '100%', sm: 80 }}>
@@ -37,24 +40,22 @@ export const GrantEntry = ({
       </Text>
       <Flex align={'center'} justify={'space-between'}>
         <Text color={'brand.slate.500'} fontSize={'13px'} fontWeight={'600'}>
-          {token && rewardAmount
-            ? `Upto ${token} ${(rewardAmount || 0).toLocaleString()}`
+          {token
+            ? `${grantAmount({ minReward: minReward!, maxReward: maxReward! })} ${token}`
             : ''}
         </Text>
-        {!!link && (
-          <Link as={NextLink} href={`/grants/${slug}`}>
-            <Button
-              color="brand.slate.400"
-              fontSize={{ base: 'sm', md: 'md' }}
-              fontWeight={500}
-              borderColor={'brand.slate.400'}
-              size={{ base: 'sm', md: 'md' }}
-              variant="outline"
-            >
-              Apply
-            </Button>
-          </Link>
-        )}
+        <Link as={NextLink} href={`/grants/${slug}`}>
+          <Button
+            color="brand.slate.400"
+            fontSize={{ base: 'sm', md: 'md' }}
+            fontWeight={500}
+            borderColor={'brand.slate.400'}
+            size={{ base: 'sm', md: 'md' }}
+            variant="outline"
+          >
+            Apply
+          </Button>
+        </Link>
       </Flex>
     </Box>
   );

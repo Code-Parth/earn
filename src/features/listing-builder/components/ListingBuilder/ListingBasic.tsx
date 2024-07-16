@@ -22,6 +22,7 @@ import { Regions } from '@prisma/client';
 import axios from 'axios';
 import debounce from 'lodash.debounce';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import {
   type Dispatch,
   type SetStateAction,
@@ -258,6 +259,7 @@ export const ListingBasic = ({
   const isProject = type === 'project';
 
   const { data: session } = useSession();
+  const posthog = usePostHog();
 
   const onSubmit = (data: any) => {
     if (Object.keys(errors).length > 0) {
@@ -269,6 +271,7 @@ export const ListingBasic = ({
         subskills: subSkills,
       });
       updateState({ ...data, skills: mergedSkills });
+      posthog.capture('basics_sponsor');
       setSteps(3);
     }
   };
@@ -280,6 +283,11 @@ export const ListingBasic = ({
       subskills: subSkills,
     });
     const formData = { ...form, ...data, skills: mergedSkills };
+    if (isNewOrDraft || isDuplicating) {
+      posthog.capture('save draft_sponsor');
+    } else {
+      posthog.capture('edit listing_sponsor');
+    }
     createDraft(formData);
   };
 
@@ -307,6 +315,7 @@ export const ListingBasic = ({
               }}
               focusBorderColor="brand.purple"
               id="title"
+              maxLength={80}
               {...register('title', {
                 required: true,
                 onChange: (e) => {
@@ -321,6 +330,19 @@ export const ListingBasic = ({
               })}
               placeholder="Develop a new landing page"
             />
+            <Text
+              color={(title?.length || 0) > 70 ? 'red' : 'brand.slate.400'}
+              fontSize={'xs'}
+              textAlign="right"
+            >
+              {title &&
+                title?.length > 50 &&
+                (80 - title?.length === 0 ? (
+                  <p>Character limit reached</p>
+                ) : (
+                  <p>{80 - (title.length || 0)} characters left</p>
+                ))}
+            </Text>
             {suggestions.length > 0 && (
               <Flex
                 gap={1}
@@ -335,9 +357,13 @@ export const ListingBasic = ({
                   {suggestions.map((suggestion, index) => (
                     <Flex key={suggestion.link} align="center" gap={2}>
                       <Link
+                        className="ph-no-capture"
                         key={suggestion.link}
                         href={suggestion.link}
                         isExternal
+                        onClick={() => {
+                          posthog.capture('similar listings_sponsor');
+                        }}
                         target="_blank"
                       >
                         {suggestion.label}
@@ -604,10 +630,16 @@ export const ListingBasic = ({
             />
           </FormControl>
           <VStack gap={4} w={'full'} mt={6}>
-            <Button w="100%" type="submit" variant="solid">
+            <Button
+              className="ph-no-capture"
+              w="100%"
+              type="submit"
+              variant="solid"
+            >
               Continue
             </Button>
             <Button
+              className="ph-no-capture"
               w="100%"
               isDisabled={!form?.title}
               isLoading={isDraftLoading}

@@ -38,7 +38,6 @@ interface User {
   linkedin?: string;
   website?: string;
   telegram?: string;
-  pow?: string;
   totalEarnedInUSD?: number;
   currentSponsorId?: string;
   currentSponsor?: SponsorType;
@@ -60,7 +59,9 @@ interface User {
     deadline: string;
     announceDate: string;
   };
-  surveysShown?: string[];
+  surveysShown?: Record<string, boolean>;
+  stRecommended?: boolean;
+  acceptedTOS?: boolean;
   emailSettings?: EmailSettings[];
 }
 export type { User };

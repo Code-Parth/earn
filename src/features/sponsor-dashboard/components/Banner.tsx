@@ -8,29 +8,26 @@ import {
   Text,
   Tooltip,
 } from '@chakra-ui/react';
-import axios from 'axios';
 import NextLink from 'next/link';
-import { useEffect, useState } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { AiOutlineEdit } from 'react-icons/ai';
 import { MdInfoOutline, MdOutlineChatBubbleOutline } from 'react-icons/md';
 
 import { EarnAvatar } from '@/components/shared/EarnAvatar';
 import { userStore } from '@/store/user';
 
-interface SponsorStats {
-  name?: string;
-  logo?: string;
-  yearOnPlatform?: number;
-  totalRewardAmount?: number;
-  totalListings?: number;
-  totalSubmissions?: number;
-}
-
-export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
+export function Banner({
+  isHackathon,
+  stats,
+  isLoading,
+}: {
+  isHackathon?: boolean;
+  stats: any;
+  isLoading: boolean;
+}) {
   const { userInfo } = userStore();
-  const [sponsorStats, setSponsorStats] = useState<SponsorStats>({});
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const sponsorId = isHackathonRoute
+  const posthog = usePostHog();
+  const sponsorId = isHackathon
     ? userInfo?.hackathonId
     : userInfo?.currentSponsorId;
 
@@ -38,21 +35,7 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
   const tooltipTextListings = `Total number of listings added to Earn`;
   const tooltipTextSubmissions = `Total number of submissions/applications received on all listings`;
 
-  useEffect(() => {
-    const getSponsorStats = async () => {
-      let apiEndpoint = '/api/sponsors/stats';
-
-      if (isHackathonRoute) {
-        apiEndpoint = '/api/hackathon/stats';
-      }
-      const sponsorData = await axios.get(apiEndpoint);
-      setSponsorStats(sponsorData.data);
-      setIsLoading(false);
-    };
-    getSponsorStats();
-  }, [sponsorId]);
-
-  const sponsor = isHackathonRoute ? sponsorStats : userInfo?.currentSponsor;
+  const sponsor = isHackathon ? stats : userInfo?.currentSponsor;
 
   if (!sponsorId) return null;
   return (
@@ -106,8 +89,8 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
                   fontWeight={400}
                   whiteSpace={'nowrap'}
                 >
-                  {!isHackathonRoute
-                    ? `Sponsor since ${sponsorStats.yearOnPlatform}`
+                  {!isHackathon
+                    ? `Sponsor since ${stats.yearOnPlatform}`
                     : 'Hackathon'}
                 </Text>
               )}
@@ -134,7 +117,7 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
                   fontWeight={400}
                   whiteSpace={'nowrap'}
                 >
-                  {!isHackathonRoute ? 'Rewarded' : 'Total Prizes'}
+                  {!isHackathon ? 'Rewarded' : 'Total Prizes'}
                 </Text>
                 <MdInfoOutline color="#94a3b8" size={16} />
               </Flex>
@@ -142,7 +125,10 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
                 <Skeleton w="72px" h="20px" mt={2} />
               ) : (
                 <Text color={'brand.slate.900'} fontSize="lg" fontWeight={600}>
-                  ${sponsorStats?.totalRewardAmount?.toLocaleString()}
+                  $
+                  {new Intl.NumberFormat('en-US', {
+                    maximumFractionDigits: 0,
+                  }).format(Math.round(stats.totalRewardAmount || 0))}
                 </Text>
               )}
             </Box>
@@ -162,7 +148,7 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
                   fontWeight={400}
                   whiteSpace={'nowrap'}
                 >
-                  {!isHackathonRoute ? 'Listings' : 'Tracks'}
+                  {!isHackathon ? 'Listings' : 'Tracks'}
                 </Text>
                 <MdInfoOutline color="#94a3b8" size={16} />
               </Flex>
@@ -170,7 +156,7 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
                 <Skeleton w="32px" h="20px" mt={2} />
               ) : (
                 <Text color={'brand.slate.900'} fontSize="lg" fontWeight={600}>
-                  {sponsorStats?.totalListings}
+                  {stats?.totalListingsAndGrants}
                 </Text>
               )}
             </Box>
@@ -198,7 +184,7 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
                 <Skeleton w="36px" h="20px" mt={2} />
               ) : (
                 <Text color={'brand.slate.900'} fontSize="lg" fontWeight={600}>
-                  {sponsorStats?.totalSubmissions}
+                  {stats?.totalSubmissionsAndApplications}
                 </Text>
               )}
             </Box>
@@ -219,9 +205,11 @@ export function Banner({ isHackathonRoute }: { isHackathonRoute?: boolean }) {
         borderRadius="md"
       >
         <Link
+          className="ph-no-capture"
           _hover={{ textDecoration: 'none' }}
           href="https://t.me/pratikdholani"
           isExternal
+          onClick={() => posthog.capture('message pratik_sponsor')}
         >
           <Flex align={'center'} justify={'space-between'}>
             <Flex align={'center'}>

@@ -11,6 +11,7 @@ import {
   useDisclosure,
 } from '@chakra-ui/react';
 import axios from 'axios';
+import { usePostHog } from 'posthog-js/react';
 import { type Dispatch, type SetStateAction, useState } from 'react';
 import {
   type FieldValues,
@@ -131,6 +132,7 @@ const SocialInput = ({
         placeholder={placeHolder}
         title={label}
         {...register(label)}
+        maxLength={180}
       />
     </Flex>
   );
@@ -153,6 +155,7 @@ export function YourLinks({ success, useFormStore }: Props) {
   const { updateState } = useFormStore();
 
   const { setUserInfo } = userStore();
+  const posthog = usePostHog();
 
   const uploadProfile = async (
     socials: {
@@ -192,15 +195,15 @@ export function YourLinks({ success, useFormStore }: Props) {
       const updateOptions = {
         ...form,
         ...socials,
-        superteamLevel: 'Lurker',
-        isTalentFilled: true,
-        generateTalentEmailSettings: true,
       };
       // eslint-disable-next-line unused-imports/no-unused-vars
       const { subSkills, ...finalOptions } = updateOptions;
 
-      const updatedUser = await axios.post('/api/user/update/', finalOptions);
-      await axios.post('/api/email/manual/welcomeTalent/');
+      const updatedUser = await axios.post(
+        '/api/user/complete-profile/',
+        finalOptions,
+      );
+      await axios.post('/api/email/manual/welcome-talent/');
       setUserInfo(updatedUser?.data);
       success();
     } catch (e) {
@@ -211,6 +214,7 @@ export function YourLinks({ success, useFormStore }: Props) {
   const { register, handleSubmit } = useForm();
 
   const onSubmit = (data: any) => {
+    posthog.capture('finish profile_talent');
     uploadProfile(
       {
         discord: data.Discord,
@@ -301,6 +305,7 @@ export function YourLinks({ success, useFormStore }: Props) {
               </Text>
             )}
             <Button
+              className="ph-no-capture"
               w={'full'}
               h="50px"
               color={'white'}

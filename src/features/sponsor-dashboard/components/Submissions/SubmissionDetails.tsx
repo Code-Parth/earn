@@ -32,6 +32,7 @@ import axios from 'axios';
 import dynamic from 'next/dynamic';
 import NextLink from 'next/link';
 import { log } from 'next-axiom';
+import { usePostHog } from 'posthog-js/react';
 import React, { type Dispatch, type SetStateAction, useState } from 'react';
 import { BsTwitterX } from 'react-icons/bs';
 import {
@@ -42,16 +43,17 @@ import {
 
 import { EarnAvatar } from '@/components/shared/EarnAvatar';
 import { tokenList } from '@/constants';
-import type { Bounty, Rewards } from '@/features/listings';
+import type { Listing, Rewards } from '@/features/listings';
 import type { SubmissionWithUser } from '@/interface/submission';
 import { getURLSanitized } from '@/utils/getURLSanitized';
 import { truncatePublicKey } from '@/utils/truncatePublicKey';
 import { truncateString } from '@/utils/truncateString';
 
-import { colorMap } from '../../utils';
+import { labelMenuOptions } from '../../constants';
+import { colorMap, isLink } from '../../utils';
 
 interface Props {
-  bounty: Bounty | null;
+  bounty: Listing | null;
   submissions: SubmissionWithUser[];
   setSubmissions: Dispatch<SetStateAction<SubmissionWithUser[]>>;
   selectedSubmission: SubmissionWithUser | undefined;
@@ -65,23 +67,6 @@ interface Props {
   setTotalPaymentsMade: Dispatch<SetStateAction<number>>;
   isHackathonPage?: boolean;
 }
-
-const menuOptions = [
-  {
-    label: 'Unreviewed',
-    value: 'Unreviewed',
-    bg: 'orange.100',
-    color: 'orange.800',
-  },
-  { label: 'Reviewed', value: 'Reviewed', bg: 'blue.100', color: 'blue.600' },
-  {
-    label: 'Shortlisted',
-    value: 'Shortlisted',
-    bg: 'purple.100',
-    color: 'purple.600',
-  },
-  { label: 'Spam', value: 'Spam', bg: 'red.100', color: 'red.600' },
-];
 
 export const SubmissionDetails = ({
   bounty,
@@ -100,6 +85,7 @@ export const SubmissionDetails = ({
   const [isPaying, setIsPaying] = useState(false);
 
   const { connected, publicKey, sendTransaction } = useWallet();
+  const posthog = usePostHog();
 
   const isProject = bounty?.type === 'project';
   const isHackathon = bounty?.type === 'hackathon';
@@ -118,7 +104,7 @@ export const SubmissionDetails = ({
     if (!id) return;
     setIsSelectingWinner(true);
     try {
-      await axios.post(`/api/submission/toggleWinner/`, {
+      await axios.post(`/api/sponsor-dashboard/submission/toggle-winner/`, {
         id,
         isWinner: !!position,
         winnerPosition: position || null,
@@ -231,42 +217,52 @@ export const SubmissionDetails = ({
       await new Promise((resolve, reject) => {
         connection.onSignature(
           signature,
-          (res) => {
+          async (res) => {
             if (res.err) {
               reject(new Error('Transaction failed'));
             } else {
-              resolve(res);
+              try {
+                await axios.post(
+                  `/api/sponsor-dashboard/submission/add-payment/`,
+                  {
+                    id,
+                    isPaid: true,
+                    paymentDetails: {
+                      txId: signature,
+                    },
+                  },
+                );
+
+                const submissionIndex = submissions.findIndex(
+                  (s) => s.id === id,
+                );
+                if (submissionIndex >= 0) {
+                  const updatedSubmission: SubmissionWithUser = {
+                    ...(submissions[submissionIndex] as SubmissionWithUser),
+                    isPaid: true,
+                    paymentDetails: {
+                      txId: signature,
+                    },
+                  };
+                  const newSubmissions = [...submissions];
+                  newSubmissions[submissionIndex] = updatedSubmission;
+                  setSubmissions(newSubmissions);
+                  setSelectedSubmission(updatedSubmission);
+                  setTotalPaymentsMade(
+                    (prevTotalPaymentsMade: number) =>
+                      prevTotalPaymentsMade + 1,
+                  );
+                }
+                resolve(res);
+              } catch (error) {
+                reject(new Error('Payment record update failed'));
+              }
             }
           },
           'confirmed',
         );
       });
 
-      await axios.post(`/api/submission/addPayment/`, {
-        id,
-        isPaid: true,
-        paymentDetails: {
-          txId: signature,
-        },
-      });
-
-      const submissionIndex = submissions.findIndex((s) => s.id === id);
-      if (submissionIndex >= 0) {
-        const updatedSubmission: SubmissionWithUser = {
-          ...(submissions[submissionIndex] as SubmissionWithUser),
-          isPaid: true,
-          paymentDetails: {
-            txId: signature,
-          },
-        };
-        const newSubmissions = [...submissions];
-        newSubmissions[submissionIndex] = updatedSubmission;
-        setSubmissions(newSubmissions);
-        setSelectedSubmission(updatedSubmission);
-        setTotalPaymentsMade(
-          (prevTotalPaymentsMade: number) => prevTotalPaymentsMade + 1,
-        );
-      }
       setIsPaying(false);
     } catch (error) {
       console.log(error);
@@ -280,7 +276,7 @@ export const SubmissionDetails = ({
     id: string | undefined,
   ) => {
     try {
-      await axios.post(`/api/submission/updateLabel/`, {
+      await axios.post(`/api/sponsor-dashboard/submission/update-label/`, {
         label,
         id,
       });
@@ -356,33 +352,47 @@ export const SubmissionDetails = ({
                   </Link>
                 </Box>
               </Flex>
-              <Flex align="center" justify={'flex-end'} gap={2} w="full">
+              <Flex
+                className="ph-no-capture"
+                align="center"
+                justify={'flex-end'}
+                gap={2}
+                w="full"
+              >
                 {selectedSubmission?.isWinner &&
                   selectedSubmission?.winnerPosition &&
                   !selectedSubmission?.isPaid &&
                   (bounty?.isWinnersAnnounced ? (
                     <>
-                      <DynamicWalletMultiButton
-                        style={{
-                          height: '40px',
-                          fontWeight: 600,
-                          fontFamily: 'Inter',
-                          // maxWidth: '96px',
-                          paddingRight: '16px',
-                          paddingLeft: '16px',
-                          fontSize: '12px',
+                      <div
+                        className="ph-no-capture"
+                        onClick={() => {
+                          posthog.capture('connect wallet_payment');
                         }}
                       >
-                        {connected
-                          ? truncatePublicKey(publicKey?.toBase58(), 3)
-                          : `Pay ${bounty?.token} ${
-                              bounty?.rewards?.[
-                                selectedSubmission?.winnerPosition as keyof Rewards
-                              ] || '0'
-                            }`}
-                      </DynamicWalletMultiButton>
+                        <DynamicWalletMultiButton
+                          style={{
+                            height: '40px',
+                            fontWeight: 600,
+                            fontFamily: 'Inter',
+                            // maxWidth: '96px',
+                            paddingRight: '16px',
+                            paddingLeft: '16px',
+                            fontSize: '12px',
+                          }}
+                        >
+                          {connected
+                            ? truncatePublicKey(publicKey?.toBase58(), 3)
+                            : `Pay ${bounty?.token} ${
+                                bounty?.rewards?.[
+                                  selectedSubmission?.winnerPosition as keyof Rewards
+                                ] || '0'
+                              }`}
+                        </DynamicWalletMultiButton>
+                      </div>
                       {connected && (
                         <Button
+                          className="ph-no-capture"
                           w="fit-content"
                           minW={'120px'}
                           mr={4}
@@ -396,6 +406,7 @@ export const SubmissionDetails = ({
                               );
                               return;
                             }
+                            posthog.capture('pay winner_sponsor');
                             handlePayout({
                               id: selectedSubmission?.id as string,
                               token: bounty?.token as string,
@@ -499,7 +510,7 @@ export const SubmissionDetails = ({
                       </Tag>
                     </MenuButton>
                     <MenuList borderColor="brand.slate.300">
-                      {menuOptions.map((option) => (
+                      {labelMenuOptions.map((option) => (
                         <MenuItem
                           key={option.value}
                           _focus={{ bg: 'brand.slate.100' }}
@@ -661,7 +672,6 @@ export const SubmissionDetails = ({
                     <Link
                       as={NextLink}
                       color="brand.purple"
-                      wordBreak={'break-all'}
                       href={getURLSanitized(selectedSubmission?.link || '#')}
                       isExternal
                     >
@@ -683,7 +693,6 @@ export const SubmissionDetails = ({
                     <Link
                       as={NextLink}
                       color="brand.purple"
-                      wordBreak={'break-all'}
                       href={getURLSanitized(selectedSubmission?.tweet || '#')}
                       isExternal
                     >
@@ -705,7 +714,7 @@ export const SubmissionDetails = ({
                   >
                     Ask
                   </Text>
-                  <Text color="brand.slate.700" wordBreak={'break-all'}>
+                  <Text color="brand.slate.700">
                     {selectedSubmission?.ask?.toLocaleString()} {bounty?.token}
                   </Text>
                 </Box>
@@ -724,9 +733,20 @@ export const SubmissionDetails = ({
                       >
                         {answer.question}
                       </Text>
-                      <Text color="brand.slate.700" wordBreak={'break-all'}>
-                        {answer.answer || '-'}
-                      </Text>
+                      {isLink(answer.answer) ? (
+                        <Link
+                          as={NextLink}
+                          color="brand.purple"
+                          href={getURLSanitized(answer.answer || '#')}
+                          isExternal
+                        >
+                          {answer.answer ? getURLSanitized(answer.answer) : '-'}
+                        </Link>
+                      ) : (
+                        <Text color="brand.slate.700">
+                          {answer.answer || '-'}
+                        </Text>
+                      )}
                     </Box>
                   ),
                 )}
@@ -740,7 +760,7 @@ export const SubmissionDetails = ({
                 >
                   Anything Else
                 </Text>
-                <Text color="brand.slate.700" wordBreak={'break-all'}>
+                <Text color="brand.slate.700">
                   {selectedSubmission?.otherInfo || '-'}
                 </Text>
               </Box>

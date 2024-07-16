@@ -1,54 +1,26 @@
-// Styles
 import 'degen/styles';
 import '../styles/globals.scss';
 
 import { ChakraProvider } from '@chakra-ui/react';
+import { setUser } from '@sentry/nextjs';
 import axios from 'axios';
 import type { AppProps } from 'next/app';
-// Fonts
-import { Domine, Inter, JetBrains_Mono } from 'next/font/google';
 import { useRouter } from 'next/router';
 import { SessionProvider, useSession } from 'next-auth/react';
 import NextTopLoader from 'nextjs-toploader';
 import posthog from 'posthog-js';
 import { PostHogProvider, usePostHog } from 'posthog-js/react';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 
+import { FeatureModal } from '@/components/modals/FeatureModal';
+import { TermsOfServices } from '@/components/modals/TermsOfServices';
 import { SolanaWalletProvider } from '@/context/SolanaWallet';
 import { userStore } from '@/store/user';
+import { fontMono, fontSans, fontSerif } from '@/theme/fonts';
 import { getURL } from '@/utils/validUrl';
 
 import theme from '../config/chakra.config';
-
-// importing localFont from a local file as Google imported fonts do not enable font-feature-settings. Reference: https://github.com/vercel/next.js/discussions/52456
-
-const fontSans = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  adjustFontFallback: true,
-  preload: true,
-  fallback: ['Inter'],
-  weight: 'variable',
-});
-
-const fontSerif = Domine({
-  subsets: ['latin'],
-  display: 'swap',
-  adjustFontFallback: true,
-  preload: true,
-  // fallback: ['Times New Roman'],
-  weight: 'variable',
-});
-
-const fontMono = JetBrains_Mono({
-  subsets: ['latin'],
-  display: 'swap',
-  adjustFontFallback: true,
-  preload: false,
-  fallback: ['Courier New'],
-  weight: 'variable',
-});
 
 // Chakra / Next/font don't play well in config.ts file for the theme. So we extend the theme here. (only the fonts)
 const extendThemeWithNextFonts = {
@@ -75,9 +47,20 @@ function MyApp({ Component, pageProps }: any) {
 
   const posthog = usePostHog();
 
+  useEffect(() => {
+    const handleRouteChange = () => posthog?.capture('$pageview');
+    router.events.on('routeChangeComplete', handleRouteChange);
+
+    return () => {
+      router.events.off('routeChangeComplete', handleRouteChange);
+    };
+  }, []);
+
   const newLoginState = router.query.loginState;
   if (newLoginState == 'signedIn' && session) {
-    posthog.identify(session.user.email);
+    const user = session.user;
+    posthog.identify(user.email);
+    setUser({ id: user?.id, email: user?.email });
     const url = new URL(window.location.href);
     url.searchParams.delete('loginState');
     window.history.replaceState(null, '', url.href);
@@ -109,6 +92,50 @@ function MyApp({ Component, pageProps }: any) {
 }
 
 function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
+  const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
+  const [latestActiveSlug, setLatestActiveSlug] = useState<string | undefined>(
+    undefined,
+  );
+  const { userInfo, setUserInfo } = userStore();
+  const router = useRouter();
+
+  const handleFeatureClose = () => {
+    setIsFeatureModalOpen(false);
+  };
+
+  const getSponsorLatestActiveSlug = async () => {
+    try {
+      const slug = await axios.get('/api/listings/latest-active-slug');
+      if (slug.data) {
+        setLatestActiveSlug(slug.data.slug);
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  // FEATURE MODAL SPONSOR ONLY
+  useEffect(() => {
+    try {
+      const updateFeatureModalShown = async () => {
+        if (
+          userInfo?.featureModalShown === false &&
+          userInfo?.currentSponsorId
+        ) {
+          setUserInfo({ ...userInfo, featureModalShown: true });
+          setIsFeatureModalOpen(true);
+          await getSponsorLatestActiveSlug();
+          await axios.post('/api/user/update/', {
+            featureModalShown: true,
+          });
+        }
+      };
+      if (!router.pathname.includes('dashboard')) updateFeatureModalShown();
+    } catch (e) {
+      console.log('unable to get current user feature modal state', e);
+    }
+  }, [userInfo]);
+
   return (
     <>
       <style jsx global>
@@ -124,7 +151,13 @@ function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
         <PostHogProvider client={posthog}>
           <SessionProvider session={session}>
             <ChakraProvider theme={extendThemeWithNextFonts}>
+              <FeatureModal
+                latestActiveBountySlug={latestActiveSlug}
+                isOpen={isFeatureModalOpen}
+                onClose={handleFeatureClose}
+              />
               <MyApp Component={Component} pageProps={pageProps} />
+              <TermsOfServices />
             </ChakraProvider>
           </SessionProvider>
         </PostHogProvider>

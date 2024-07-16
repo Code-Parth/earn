@@ -13,6 +13,9 @@ const theme = extendTheme({
       purple: '#6366F1',
       'purple.light': '#7471ff',
       'purple.dark': '#4F46E5',
+      'purple.50': '#EEF2FF',
+      'purple.300': '#A5B4FC',
+      'purple.400': '#818CF8',
       slate: {
         100: '#f1f5f9',
         200: '#e2e8f0',
@@ -26,6 +29,11 @@ const theme = extendTheme({
       },
       grey: {
         50: '#F7FAFC',
+      },
+      progress: {
+        darkGreen: { 500: '#0D9488' },
+        lightGreen: { 500: '#84CC16' },
+        lightYellow: { 500: '#FDBA74' },
       },
     },
   },
@@ -83,6 +91,20 @@ const theme = extendTheme({
             },
           },
         },
+        solidSecondary: {
+          color: 'brand.purple.dark',
+          bg: 'brand.purple.50',
+          _hover: {
+            color: 'white',
+            bg: 'brand.purple',
+          },
+          _disabled: {
+            _hover: {
+              color: 'white',
+              bg: 'brand.purple.50 !important',
+            },
+          },
+        },
         outline: {
           color: 'brand.purple',
           bg: 'transparent',
@@ -129,6 +151,13 @@ const theme = extendTheme({
               bg: 'transparent !important',
             },
           },
+        },
+      },
+    },
+    Progress: {
+      baseStyle: {
+        filledTrack: {
+          bg: 'brand.purple',
         },
       },
     },

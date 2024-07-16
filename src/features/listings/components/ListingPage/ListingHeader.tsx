@@ -1,17 +1,9 @@
-import { InfoOutlineIcon } from '@chakra-ui/icons';
 import {
   Flex,
   Heading,
   HStack,
   IconButton,
   Image,
-  Link,
-  Popover,
-  PopoverArrow,
-  PopoverBody,
-  PopoverCloseButton,
-  PopoverContent,
-  PopoverTrigger,
   Spinner,
   Text,
   Tooltip,
@@ -20,27 +12,28 @@ import {
 } from '@chakra-ui/react';
 import type { SubscribeBounty } from '@prisma/client';
 import axios from 'axios';
-import NextLink from 'next/link';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { TbBell, TbBellRinging } from 'react-icons/tb';
 
-import { Superteams } from '@/constants/Superteam';
 import { AuthWrapper } from '@/features/auth';
-import { getRegionTooltipLabel, WarningModal } from '@/features/listings';
+import { type Listing, WarningModal } from '@/features/listings';
 import type { User } from '@/interface/user';
 import { userStore } from '@/store/user';
 import { dayjs } from '@/utils/dayjs';
 
-import type { Bounty } from '../../types';
+import { ListingTabLink } from './ListingTabLink';
+import { RegionLabel } from './RegionLabel';
+import { StatusBadge } from './StatusBadge';
 
 export function ListingHeader({
   listing,
   isTemplate,
 }: {
-  listing: Bounty;
+  listing: Listing;
   isTemplate?: boolean;
 }) {
   const {
@@ -59,6 +52,7 @@ export function ListingHeader({
     Hackathon,
   } = listing;
   const router = useRouter();
+  const posthog = usePostHog();
   const {
     isOpen: warningIsOpen,
     onOpen: warningOnOpen,
@@ -68,65 +62,57 @@ export function ListingHeader({
   const hasDeadlineEnded = dayjs().isAfter(deadline);
   const hasHackathonStarted = dayjs().isAfter(Hackathon?.startDate);
   const [update, setUpdate] = useState<boolean>(false);
-  const [sub, setSub] = useState<
-    (SubscribeBounty & {
-      User: User | null;
-    })[]
-  >([]);
+  const [sub, setSub] = useState<(SubscribeBounty & { User: User | null })[]>(
+    [],
+  );
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
   const { status: authStatus } = useSession();
 
   const isAuthenticated = authStatus === 'authenticated';
 
-  const handleSubscribe = async () => {
-    if (isAuthenticated) {
-      if (!userInfo?.isTalentFilled) {
-        warningOnOpen();
-        return;
-      }
+  const handleToggleSubscribe = async () => {
+    if (!isAuthenticated || !userInfo?.isTalentFilled) return;
 
-      setIsSubscribeLoading(true);
-      try {
-        await axios.post('/api/bounties/subscribe/subscribe', {
-          bountyId: id,
-        });
-        setUpdate((prev) => !prev);
-        setIsSubscribeLoading(false);
-        toast.success('Subscribed to the listing');
-      } catch (error) {
-        console.log(error);
-        setIsSubscribeLoading(false);
-        toast.error('Error');
-      }
+    if (!userInfo?.isTalentFilled) {
+      warningOnOpen();
+      return;
     }
-  };
-  const handleUnSubscribe = async (idSub: string) => {
-    setIsSubscribeLoading(true);
 
+    setIsSubscribeLoading(true);
     try {
-      await axios.post('/api/bounties/subscribe/unSubscribe', {
-        id: idSub,
-      });
+      await axios.post('/api/listings/notifications/toggle', { bountyId: id });
       setUpdate((prev) => !prev);
-      setIsSubscribeLoading(false);
-      toast.success('Unsubscribed');
+      toast.success(
+        sub.find((e) => e.userId === userInfo?.id)
+          ? 'Unsubscribed'
+          : 'Subscribed',
+      );
     } catch (error) {
       console.log(error);
+      toast.error('Error occurred while toggling subscription');
+    } finally {
       setIsSubscribeLoading(false);
-      toast.error('Error');
     }
   };
 
   useEffect(() => {
     const fetchUser = async () => {
-      const { data } = await axios.post('/api/bounties/subscribe/get', {
-        listingId: id,
-      });
-      setSub(data);
+      try {
+        const { data } = await axios.post(
+          '/api/listings/notifications/status',
+          {
+            listingId: id,
+          },
+        );
+        setSub(data);
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
     };
+
     fetchUser();
-  }, [update]);
+  }, [update, id]);
 
   const isProject = type === 'project';
   const isHackathon = type === 'hackathon';
@@ -161,46 +147,6 @@ export function ListingHeader({
     statusTextColor = 'green.600';
   }
 
-  const displayValue = Superteams.find(
-    (st) => st.region === region,
-  )?.displayValue;
-
-  const regionTooltipLabel = getRegionTooltipLabel(region);
-
-  const ListingNavLink = ({
-    href,
-    text,
-    isActive,
-  }: {
-    href: string;
-    text: string;
-    isActive: boolean;
-  }) => {
-    return (
-      <Link
-        as={NextLink}
-        alignItems="center"
-        justifyContent="center"
-        display="flex"
-        h={'full'}
-        color="brand.slate.500"
-        fontSize={{ base: 'xs', md: 'sm' }}
-        fontWeight={500}
-        textDecoration="none"
-        borderBottom="2px solid"
-        borderBottomColor={isActive ? 'brand.purple' : 'transparent'}
-        _hover={{
-          textDecoration: 'none',
-          borderBottom: '2px solid',
-          borderBottomColor: 'brand.purple',
-        }}
-        href={href}
-      >
-        {text}
-      </Link>
-    );
-  };
-
   const ListingTitle = () => {
     return (
       <Heading
@@ -214,20 +160,13 @@ export function ListingHeader({
     );
   };
 
-  const StatusBadge = () => {
+  const ListingStatus = () => {
     return (
-      <Text
-        px={3}
-        py={1}
-        color={statusTextColor}
-        fontSize={{ base: 'xx-small', sm: 'xs' }}
-        fontWeight={500}
-        bg={statusBgColor}
-        whiteSpace={'nowrap'}
-        rounded={'full'}
-      >
-        {statusText}
-      </Text>
+      <StatusBadge
+        textColor={statusTextColor}
+        bgColor={statusBgColor}
+        text={statusText}
+      />
     );
   };
 
@@ -247,7 +186,7 @@ export function ListingHeader({
         </Text>
         {isHackathon ? (
           <Flex align={'center'}>
-            <Image h="4" alt={type} src={Hackathon?.altLogo} />
+            <Image h="2.5rem" alt={type} src={Hackathon?.altLogo} />
           </Flex>
         ) : (
           <Flex>
@@ -289,50 +228,9 @@ export function ListingHeader({
           </Flex>
         )}
         <Flex display={{ base: 'flex', md: 'none' }}>
-          <StatusBadge />
+          <ListingStatus />
         </Flex>
-        <Tooltip
-          px={4}
-          py={2}
-          color="brand.slate.500"
-          fontFamily={'var(--font-sans)'}
-          fontSize={'small'}
-          bg="white"
-          borderRadius={'lg'}
-          label={regionTooltipLabel}
-        >
-          <Text
-            px={3}
-            py={1}
-            color={'#0800A5'}
-            fontSize={{ base: 'xx-small', sm: 'xs' }}
-            fontWeight={500}
-            bg="#EBEAFF"
-            whiteSpace={'nowrap'}
-            rounded={'full'}
-          >
-            {region === 'GLOBAL' ? 'Global' : `${displayValue} Only`}
-          </Text>
-        </Tooltip>
-        <Popover>
-          <PopoverTrigger>
-            <InfoOutlineIcon
-              display={{ base: 'flex', sm: 'none' }}
-              boxSize={'12px'}
-            />
-          </PopoverTrigger>
-          <PopoverContent>
-            <PopoverArrow />
-            <PopoverCloseButton color="brand.slate.300" />
-            <PopoverBody
-              color={'brand.slate.500'}
-              fontSize={'xs'}
-              fontWeight={500}
-            >
-              {regionTooltipLabel}
-            </PopoverBody>
-          </PopoverContent>
-        </Popover>
+        <RegionLabel region={region} />
       </Flex>
     );
   };
@@ -354,6 +252,7 @@ export function ListingHeader({
     <VStack px={{ base: 3, md: 6 }} bg={'white'}>
       {warningIsOpen && (
         <WarningModal
+          onCTAClick={() => posthog.capture('complete profile_CTA pop up')}
           isOpen={warningIsOpen}
           onClose={warningOnClose}
           title={'Complete your profile'}
@@ -375,13 +274,13 @@ export function ListingHeader({
       >
         <HStack align="center">
           <SponsorLogo />
-          <VStack align={'start'}>
+          <VStack align={'start'} gap={isHackathon ? 0 : 1}>
             <HStack>
               <Flex display={{ base: 'none', md: 'flex' }}>
                 <ListingTitle />
               </Flex>
               <Flex display={{ base: 'none', md: 'flex' }}>
-                <StatusBadge />
+                <ListingStatus />
               </Flex>
             </HStack>
             {!isTemplate && (
@@ -396,6 +295,7 @@ export function ListingHeader({
             <HStack align="start">
               <AuthWrapper>
                 <IconButton
+                  className="ph-no-capture"
                   color={
                     sub.find((e) => e.userId === userInfo?.id)
                       ? 'white'
@@ -417,15 +317,12 @@ export function ListingHeader({
                     )
                   }
                   onClick={() => {
-                    if (sub.find((e) => e.userId === userInfo?.id)) {
-                      handleUnSubscribe(
-                        sub.find((e) => e.userId === userInfo?.id)
-                          ?.id as string,
-                      );
-
-                      return;
-                    }
-                    handleSubscribe();
+                    posthog.capture(
+                      sub.find((e) => e.userId === userInfo?.id)
+                        ? 'unnotify me_listing'
+                        : 'notify me_listing',
+                    );
+                    handleToggleSubscribe();
                   }}
                   variant="solid"
                 />
@@ -481,7 +378,7 @@ export function ListingHeader({
             my={'auto'}
             px={3}
           >
-            <ListingNavLink
+            <ListingTabLink
               href={`/listings/${type}/${slug}/`}
               text="DETAILS"
               isActive={
@@ -491,7 +388,8 @@ export function ListingHeader({
             />
 
             {!isProject && isWinnersAnnounced && (
-              <ListingNavLink
+              <ListingTabLink
+                onClick={() => posthog.capture('submissions tab_listing')}
                 href={`/listings/${type}/${slug}/submission`}
                 text="SUBMISSIONS"
                 isActive={router.asPath.includes('submission')}
@@ -499,7 +397,7 @@ export function ListingHeader({
             )}
 
             {isProject && references && references?.length > 0 && (
-              <ListingNavLink
+              <ListingTabLink
                 href={`/listings/${type}/${slug}/references`}
                 text="REFERENCES"
                 isActive={router.asPath.includes('references')}

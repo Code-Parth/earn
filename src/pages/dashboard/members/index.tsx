@@ -35,13 +35,18 @@ import {
 import axios from 'axios';
 import { type Session } from 'next-auth';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 import { EarnAvatar } from '@/components/shared/EarnAvatar';
 import { ErrorSection } from '@/components/shared/ErrorSection';
 import { LoadingSection } from '@/components/shared/LoadingSection';
-import { InviteMembers } from '@/features/sponsor-dashboard';
+import {
+  Banner,
+  InviteMembers,
+  type SponsorStats,
+} from '@/features/sponsor-dashboard';
 import type { UserSponsor } from '@/interface/userSponsor';
 import { Sidebar } from '@/layouts/Sponsor';
 import { userStore } from '@/store/user';
@@ -58,14 +63,22 @@ const Index = () => {
   const [skip, setSkip] = useState(0);
   const length = 15;
 
+  const [sponsorStats, setSponsorStats] = useState<SponsorStats>({});
+  const [isStatsLoading, setIsStatsLoading] = useState<boolean>(true);
+
   const debouncedSetSearchText = useRef(debounce(setSearchText, 300)).current;
 
   const { data: session } = useSession();
+  const posthog = usePostHog();
+
+  useEffect(() => {
+    posthog.capture('members tab_sponsor');
+  }, []);
 
   const getMembers = async () => {
     setIsMembersLoading(true);
     try {
-      const membersList = await axios.get('/api/members/', {
+      const membersList = await axios.get('/api/sponsor-dashboard/members/', {
         params: {
           sponsorId: userInfo?.currentSponsorId,
           searchText,
@@ -103,16 +116,32 @@ const Index = () => {
   }, [userInfo?.currentSponsorId, skip, searchText]);
 
   const onRemoveMember = async (userId: string | undefined) => {
-    await axios.post('/api/members/remove', {
+    await axios.post('/api/sponsor-dashboard/members/remove', {
       id: userId,
     });
 
     await getMembers();
   };
 
+  useEffect(() => {
+    const getSponsorStats = async () => {
+      try {
+        const sponsorData = await axios.get('/api/sponsors/stats');
+        setSponsorStats(sponsorData.data);
+      } catch (err) {
+        console.log('Failed to fetch sponsor stats');
+      } finally {
+        setIsStatsLoading(false);
+      }
+    };
+
+    getSponsorStats();
+  }, [userInfo?.currentSponsorId]);
+
   return (
-    <Sidebar showBanner={true}>
+    <Sidebar>
       {isOpen && <InviteMembers isOpen={isOpen} onClose={onClose} />}
+      <Banner stats={sponsorStats} isLoading={isStatsLoading} />
       <Flex justify="space-between" mb={4}>
         <Flex align="center" gap={3}>
           <Text color="brand.slate.800" fontSize="lg" fontWeight={600}>
@@ -132,10 +161,14 @@ const Index = () => {
             (userInfo?.UserSponsors?.length &&
               userInfo?.UserSponsors[0]?.role === 'ADMIN')) && (
             <Button
+              className="ph-no-capture"
               color="#6366F1"
               bg="#E0E7FF"
               leftIcon={<AddIcon />}
-              onClick={onOpen}
+              onClick={() => {
+                posthog.capture('invite member_sponsor');
+                onOpen();
+              }}
               variant="solid"
             >
               Invite Members

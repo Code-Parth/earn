@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { LoadingSection } from '@/components/shared/LoadingSection';
 import { CreateListing } from '@/features/listing-builder';
-import type { Bounty } from '@/features/listings';
+import type { Listing } from '@/features/listings';
 import { Sidebar } from '@/layouts/Sponsor';
 import { userStore } from '@/store/user';
 
@@ -17,12 +17,15 @@ function EditBounty({ listing }: Props) {
   const router = useRouter();
   const { userInfo } = userStore();
   const [isBountyLoading, setIsBountyLoading] = useState(true);
-  const [bounty, setBounty] = useState<Bounty | undefined>();
+  const [bounty, setBounty] = useState<Listing | undefined>();
 
   const getBounty = async () => {
     setIsBountyLoading(true);
     try {
-      const bountyDetails = await axios.get(`/api/bounties/${listing}/`);
+      const bountyDetails = await axios.get(
+        `/api/sponsor-dashboard/${listing}/listing?type=hackathon`,
+      );
+      console.log('bountyDetails', bountyDetails.data);
       if (bountyDetails.data.hackathonId !== userInfo?.hackathonId) {
         router.push(`/dashboard/hackathon/`);
       } else {

@@ -9,10 +9,12 @@ import {
   Text,
   useDisclosure,
 } from '@chakra-ui/react';
+import axios from 'axios';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
-import { type ReactNode, useEffect } from 'react';
+import { usePostHog } from 'posthog-js/react';
+import { type ReactNode, useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
   MdList,
@@ -20,10 +22,11 @@ import {
   MdOutlineGroup,
 } from 'react-icons/md';
 
+import { EntityNameModal } from '@/components/modals/EntityNameModal';
+import { FeatureModal } from '@/components/modals/FeatureModal';
 import { LoadingSection } from '@/components/shared/LoadingSection';
 import { SelectHackathon, SelectSponsor } from '@/features/listing-builder';
 import {
-  Banner,
   CreateListingModal,
   SponsorInfoModal,
 } from '@/features/sponsor-dashboard';
@@ -36,6 +39,7 @@ interface LinkItemProps {
   link?: string;
   icon: IconType;
   isExternal?: boolean;
+  posthog?: string;
 }
 
 interface NavItemProps extends FlexProps {
@@ -44,17 +48,16 @@ interface NavItemProps extends FlexProps {
   children: ReactNode;
 }
 
-export function Sidebar({
-  children,
-  showBanner = false,
-}: {
-  children: ReactNode;
-  showBanner?: boolean;
-}) {
-  const { userInfo } = userStore();
+export function Sidebar({ children }: { children: ReactNode }) {
+  const { userInfo, setUserInfo } = userStore();
   const { data: session, status } = useSession();
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const posthog = usePostHog();
+  const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
+  const [latestActiveSlug, setLatestActiveSlug] = useState<string | undefined>(
+    undefined,
+  );
 
   const { query } = router;
   const open = !!query.open; // Replace 'paramName' with the actual parameter name
@@ -70,13 +73,67 @@ export function Sidebar({
     onClose: onSponsorInfoModalClose,
   } = useDisclosure();
 
+  const {
+    isOpen: isScoutAnnounceModalOpen,
+    onOpen: onScoutAnnounceModalOpen,
+    onClose: onScoutAnnounceModalClose,
+  } = useDisclosure();
+
+  function sponsorInfoCloseAltered() {
+    onSponsorInfoModalClose();
+    if (userInfo?.featureModalShown === false && userInfo?.currentSponsorId)
+      onScoutAnnounceModalOpen();
+  }
+
+  const handleEntityClose = () => {
+    setIsEntityModalOpen(false);
+  };
+
+  const getSponsorLatestActiveSlug = async () => {
+    try {
+      const slug = await axios.get('/api/listings/latest-active-slug');
+      if (slug.data) {
+        setLatestActiveSlug(slug.data.slug);
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  // ENTITY NAME TO SPONSORS
   useEffect(() => {
     if (
-      userInfo?.currentSponsorId &&
-      (!userInfo?.firstName || !userInfo?.lastName || !userInfo?.username)
+      userInfo &&
+      userInfo.currentSponsor &&
+      userInfo.role !== 'GOD' &&
+      !userInfo.currentSponsor.entityName
     ) {
-      onSponsorInfoModalOpen();
+      setIsEntityModalOpen(true);
+    } else {
+      setIsEntityModalOpen(false);
     }
+  }, [userInfo]);
+
+  useEffect(() => {
+    const modalsToShow = async () => {
+      if (
+        userInfo?.currentSponsorId &&
+        (!userInfo?.firstName || !userInfo?.lastName || !userInfo?.username)
+      ) {
+        onSponsorInfoModalOpen();
+      } else if (
+        userInfo?.featureModalShown === false &&
+        userInfo?.currentSponsorId
+      ) {
+        await getSponsorLatestActiveSlug();
+        onScoutAnnounceModalOpen();
+        await axios.post('/api/user/update/', {
+          featureModalShown: true,
+        });
+        setUserInfo({ ...userInfo, featureModalShown: true });
+      }
+    };
+    modalsToShow();
   }, [userInfo]);
 
   if (!session && status === 'loading') {
@@ -97,6 +154,7 @@ export function Sidebar({
           name: 'Get Help',
           link: 'https://t.me/pratikdholani',
           icon: MdOutlineChatBubbleOutline,
+          posthog: 'get help_sponsor',
         },
       ]
     : [
@@ -106,6 +164,7 @@ export function Sidebar({
           name: 'Get Help',
           link: 'https://t.me/pratikdholani',
           icon: MdOutlineChatBubbleOutline,
+          posthog: 'get help_sponsor',
         },
       ];
 
@@ -181,10 +240,16 @@ export function Sidebar({
         />
       }
     >
+      <FeatureModal
+        latestActiveBountySlug={latestActiveSlug}
+        onClose={onScoutAnnounceModalClose}
+        isOpen={isScoutAnnounceModalOpen}
+      />
       <SponsorInfoModal
-        onClose={onSponsorInfoModalClose}
+        onClose={sponsorInfoCloseAltered}
         isOpen={isSponsorInfoModalOpen}
       />
+      <EntityNameModal isOpen={isEntityModalOpen} onClose={handleEntityClose} />
       <Flex display={{ base: 'flex', md: 'none' }} minH="80vh" px={3}>
         <Text
           align={'center'}
@@ -216,11 +281,15 @@ export function Sidebar({
           <Flex align="center" justify="space-between" px={6} pb={6}>
             {!isHackathonRoute ? (
               <Button
+                className="ph-no-capture"
                 w="full"
                 py={'22px'}
                 fontSize="md"
                 leftIcon={<AddIcon w={3} h={3} />}
-                onClick={() => onOpen()}
+                onClick={() => {
+                  posthog.capture('create new listing_sponsor');
+                  onOpen();
+                }}
                 variant="solid"
               >
                 Create New Listing
@@ -240,7 +309,15 @@ export function Sidebar({
             )}
           </Flex>
           {LinkItems.map((link) => (
-            <NavItem key={link.name} link={link.link} icon={link.icon}>
+            <NavItem
+              onClick={() => {
+                if (link.posthog) posthog.capture(link.posthog);
+              }}
+              className="ph-no-capture"
+              key={link.name}
+              link={link.link}
+              icon={link.icon}
+            >
               {link.name}
             </NavItem>
           ))}
@@ -248,7 +325,6 @@ export function Sidebar({
         {showLoading && <LoadingSection />}
         {showContent && (
           <Box w="full" px={6} py={10} bg="white">
-            {showBanner && <Banner isHackathonRoute={isHackathonRoute} />}
             {children}
           </Box>
         )}

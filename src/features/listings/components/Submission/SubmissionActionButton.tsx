@@ -2,6 +2,7 @@ import { Button, Flex, Tooltip, useDisclosure } from '@chakra-ui/react';
 import axios from 'axios';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import React, {
   type Dispatch,
   type SetStateAction,
@@ -10,22 +11,22 @@ import React, {
 } from 'react';
 
 import { SurveyModal } from '@/components/Survey';
-import { Superteams } from '@/constants/Superteam';
 import { AuthWrapper } from '@/features/auth';
 import {
   getListingDraftStatus,
   getRegionTooltipLabel,
   isDeadlineOver,
+  type Listing,
+  userRegionEligibilty,
 } from '@/features/listings';
 import { userStore } from '@/store/user';
 
-import { type Bounty } from '../../types';
 import { WarningModal } from '../WarningModal';
 import { EasterEgg } from './EasterEgg';
 import { SubmissionModal } from './SubmissionModal';
 
 interface Props {
-  listing: Bounty;
+  listing: Listing;
   hasHackathonStarted: boolean;
   submissionNumber: number;
   setSubmissionNumber: Dispatch<SetStateAction<number>>;
@@ -43,7 +44,6 @@ export const SubmissionActionButton = ({
     isPublished,
     deadline,
     region,
-    applicationLink,
     type,
     isWinnersAnnounced,
   } = listing;
@@ -54,22 +54,11 @@ export const SubmissionActionButton = ({
 
   const { userInfo } = userStore();
 
-  function userRegionEligibilty() {
-    if (region === 'GLOBAL') {
-      return true;
-    }
-
-    const superteam = Superteams.find((st) => st.region === region);
-
-    const isEligible =
-      !!(
-        userInfo?.location && superteam?.country.includes(userInfo?.location)
-      ) || false;
-
-    return isEligible;
-  }
-
-  const isUserEligibleByRegion = userRegionEligibilty();
+  const isUserEligibleByRegion = userRegionEligibilty(
+    region,
+    userInfo?.location,
+  );
+  const posthog = usePostHog();
 
   const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -83,26 +72,28 @@ export const SubmissionActionButton = ({
 
   const bountyDraftStatus = getListingDraftStatus(status, isPublished);
 
+  const pastDeadline = isDeadlineOver(deadline) || isWinnersAnnounced;
+  const buttonState = getButtonState();
+
   const handleSubmit = () => {
     if (isAuthenticated) {
-      if (applicationLink) {
-        window.open(applicationLink, '_blank');
-        return;
-      }
       if (!userInfo?.isTalentFilled) {
         warningOnOpen();
       } else {
+        if (buttonState === 'submit') {
+          posthog.capture('start_submission');
+        } else if (buttonState === 'edit') {
+          posthog.capture('edit_submission');
+        }
         onOpen();
       }
     }
   };
 
-  const pastDeadline = isDeadlineOver(deadline) || isWinnersAnnounced;
-
   const getUserSubmission = async () => {
     setIsUserSubmissionLoading(true);
     try {
-      const submissionDetails = await axios.get(`/api/submission/${id}/user/`);
+      const submissionDetails = await axios.get(`/api/listings/${id}/user/`);
       setIsSubmitted(!!submissionDetails?.data?.id);
       setIsUserSubmissionLoading(false);
     } catch (e) {
@@ -119,7 +110,6 @@ export const SubmissionActionButton = ({
 
   let buttonText;
   let buttonBG;
-  let btnPointerEvents: any;
   let isBtnDisabled;
   let btnLoadingText;
 
@@ -128,8 +118,6 @@ export const SubmissionActionButton = ({
     if (isSubmitted && pastDeadline) return 'submitted';
     return 'submit';
   }
-
-  const buttonState = getButtonState();
 
   switch (buttonState) {
     case 'edit':
@@ -200,6 +188,7 @@ export const SubmissionActionButton = ({
         )}
       {warningIsOpen && (
         <WarningModal
+          onCTAClick={() => posthog.capture('complete profile_CTA pop up')}
           isOpen={warningIsOpen}
           onClose={warningOnClose}
           title={'Complete your profile'}
@@ -250,6 +239,7 @@ export const SubmissionActionButton = ({
         rounded="md"
       >
         <Flex
+          className="ph-no-capture"
           pos={{ base: 'fixed', md: 'static' }}
           zIndex={999}
           bottom={0}
@@ -263,13 +253,12 @@ export const SubmissionActionButton = ({
           <AuthWrapper style={{ w: 'full' }}>
             <Button
               w={'full'}
-              mb={{ base: 0, md: 5 }}
+              mb={{ base: 12, md: 5 }}
               bg={buttonBG}
               _hover={{ bg: buttonBG }}
               _disabled={{
                 opacity: { base: '96%', md: '70%' },
               }}
-              pointerEvents={btnPointerEvents}
               isDisabled={isBtnDisabled}
               isLoading={isUserSubmissionLoading}
               loadingText={btnLoadingText}

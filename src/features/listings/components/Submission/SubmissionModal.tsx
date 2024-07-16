@@ -2,8 +2,6 @@ import {
   Box,
   Button,
   FormControl,
-  FormErrorMessage,
-  FormHelperText,
   FormLabel,
   Image,
   Input,
@@ -18,18 +16,24 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react';
-import { PublicKey } from '@solana/web3.js';
 import axios from 'axios';
+import { usePostHog } from 'posthog-js/react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { AutoResizeTextarea } from '@/components/shared/autosize-textarea';
+import {
+  TextAreaWithCounter,
+  TextInputWithHelper,
+} from '@/components/Form/TextAreaHelpers';
 import { tokenList } from '@/constants';
 import { randomSubmissionCommentGenerator } from '@/features/comments';
-import { type Bounty } from '@/features/listings';
 import { userStore } from '@/store/user';
+import { validateSolAddress } from '@/utils/validateSolAddress';
 
+import { type Listing } from '../../types';
+import { isValidUrl, isYoutubeOrLoomLink } from '../../utils';
 import { QuestionHandler } from './QuestionHandler';
+import { SubmissionTerms } from './SubmissionTerms';
 
 interface Props {
   id: string | undefined;
@@ -39,7 +43,7 @@ interface Props {
   setSubmissionNumber: (arg0: number) => void;
   submissionNumber: number;
   editMode: boolean;
-  listing: Bounty;
+  listing: Listing;
   showEasterEgg: () => void;
   onSurveyOpen: () => void;
 }
@@ -71,11 +75,20 @@ export const SubmissionModal = ({
     minRewardAsk,
     maxRewardAsk,
   } = listing;
+
+  const [eligibilityQs, setEligibilityQs] = useState(
+    eligibility?.map((q) => ({
+      ...q,
+      error: '',
+    })),
+  );
   const isProject = type === 'project';
   const isHackathon = type === 'hackathon';
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isTOSModalOpen, setIsTOSModalOpen] = useState(false);
+  const [error, setError] = useState<any>('');
   const [publicKeyError, setPublicKeyError] = useState('');
+  const [submissionLinkError, setSubmissionLinkError] = useState('');
   const [askError, setAskError] = useState('');
   const {
     register,
@@ -86,6 +99,7 @@ export const SubmissionModal = ({
   } = useForm();
 
   const { userInfo, setUserInfo } = userStore();
+  const posthog = usePostHog();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -138,22 +152,8 @@ export const SubmissionModal = ({
     fetchData();
   }, [id, editMode, reset]);
 
-  function validateSolAddress(address: string) {
-    try {
-      const pubkey = new PublicKey(address);
-      const isSolana = PublicKey.isOnCurve(pubkey.toBuffer());
-      if (!isSolana) {
-        setPublicKeyError('Please enter a valid Solana address');
-        return false;
-      }
-      return true;
-    } catch (err) {
-      setPublicKeyError('Please enter a valid Solana address');
-      return false;
-    }
-  }
-
   const submitSubmissions = async (data: any) => {
+    posthog.capture('confirmed_submission');
     setIsLoading(true);
     try {
       const {
@@ -164,10 +164,11 @@ export const SubmissionModal = ({
         publicKey,
         ...answers
       } = data;
-      const eligibilityAnswers = eligibility?.map((q) => ({
-        question: q.question,
-        answer: answers[`eligibility-${q.order}`],
-      }));
+      const eligibilityAnswers =
+        eligibility?.map((q) => ({
+          question: q.question,
+          answer: answers[`eligibility-${q.order}`],
+        })) ?? [];
       await axios.post('/api/user/update/', {
         publicKey,
       });
@@ -243,27 +244,22 @@ export const SubmissionModal = ({
       subheadingText = "We can't wait to see what you've created!";
       break;
     case 'hackathon':
-      headerText = 'Hackathon Submission';
+      headerText = 'Talent Olympics Submission';
       subheadingText = (
         <>
-          Share your hackathon submission here! Remember:
+          Note:
           <Text>
             1. In the “Link to your Submission” field, submit your hackathon
             project’s most useful link (could be a loom video, GitHub link,
             website, etc)
           </Text>
           <Text>
-            2. To be eligible for different tracks, you need to submit to each
-            track separately
+            2. To be eligible for different challenges, you need to submit to
+            each challenge separately
           </Text>
           <Text>
-            3. There&apos;s no restriction on the number of tracks you can
+            3. {`There's no`} restriction on the number of challenges you can
             submit to
-          </Text>
-          <Text>
-            4. You can mark the Project Website, Project Twitter, and
-            Presentation Link fields as &quot;NA&quot; in case you do not have
-            these ready at the time of submission.
           </Text>
         </>
       );
@@ -306,109 +302,64 @@ export const SubmissionModal = ({
             <VStack gap={4} mb={5}>
               {!isProject ? (
                 <>
-                  <FormControl isRequired>
-                    <FormLabel
-                      mb={0}
-                      color={'brand.slate.600'}
-                      fontWeight={600}
-                      htmlFor={'applicationLink'}
-                    >
-                      Link to Your Submission
-                    </FormLabel>
-                    <FormHelperText mt={0} mb={2} color="brand.slate.500">
-                      Make sure this link is accessible by everyone!
-                    </FormHelperText>
-                    <Input
-                      borderColor={'brand.slate.300'}
-                      _placeholder={{ color: 'brand.slate.300' }}
-                      focusBorderColor="brand.purple"
-                      id="applicationLink"
-                      placeholder="Add a link"
-                      {...register('applicationLink')}
-                      maxLength={500}
-                    />
-                    <Text
-                      color={
-                        (watch('applicationLink')?.length || 0) > 400
-                          ? 'red'
-                          : 'brand.slate.400'
-                      }
-                      fontSize={'xs'}
-                      textAlign="right"
-                    >
-                      {watch('applicationLink')?.length > 300 &&
-                        (500 - (watch('applicationLink')?.length || 0) === 0 ? (
-                          <p>Character limit reached</p>
-                        ) : (
-                          <p>
-                            {500 - (watch('applicationLink')?.length || 0)}{' '}
-                            characters left
-                          </p>
-                        ))}
-                    </Text>
-                    <FormErrorMessage>
-                      {errors.applicationLink ? (
-                        <>{errors.applicationLink.message}</>
-                      ) : (
-                        <></>
-                      )}
-                    </FormErrorMessage>
-                  </FormControl>
-                  <FormControl>
-                    <FormLabel
-                      mb={0}
-                      color={'brand.slate.600'}
-                      fontWeight={600}
-                      htmlFor={'tweetLink'}
-                    >
-                      Tweet Link
-                    </FormLabel>
-                    <FormHelperText mt={0} mb={2} color="brand.slate.500">
-                      This helps sponsors discover (and maybe repost) your work
-                      on Twitter! If this submission is for a Twitter thread
-                      bounty, you can ignore this field.
-                    </FormHelperText>
-                    <Input
-                      borderColor={'brand.slate.300'}
-                      _placeholder={{ color: 'brand.slate.300' }}
-                      focusBorderColor="brand.purple"
-                      id="tweetLink"
-                      placeholder="Add a tweet's link"
-                      {...register('tweetLink')}
-                      maxLength={500}
-                    />
-                    <Text
-                      color={
-                        (watch('tweetLink')?.length || 0) > 400
-                          ? 'red'
-                          : 'brand.slate.400'
-                      }
-                      fontSize={'xs'}
-                      textAlign="right"
-                    >
-                      {watch('tweetLink')?.length > 300 &&
-                        (500 - (watch('tweetLink')?.length || 0) === 0 ? (
-                          <p>Character limit reached</p>
-                        ) : (
-                          <p>
-                            {500 - (watch('tweetLink')?.length || 0)} characters
-                            left
-                          </p>
-                        ))}
-                    </Text>
-                    <FormErrorMessage>
-                      {errors.tweetLink ? (
-                        <>{errors.tweetLink.message}</>
-                      ) : (
-                        <></>
-                      )}
-                    </FormErrorMessage>
-                  </FormControl>
+                  <TextAreaWithCounter
+                    id="applicationLink"
+                    label="Link to Your Submission"
+                    helperText="Make sure this link is accessible by everyone!"
+                    placeholder="Add a link"
+                    register={register}
+                    watch={watch}
+                    maxLength={500}
+                    errors={errors}
+                    isRequired
+                  />
+                  <TextAreaWithCounter
+                    id="tweetLink"
+                    label="Tweet Link"
+                    helperText="This helps sponsors discover (and maybe repost) your work on Twitter! If this submission is for a Twitter thread bounty, you can ignore this field."
+                    placeholder="Add a tweet's link"
+                    register={register}
+                    watch={watch}
+                    maxLength={500}
+                    errors={errors}
+                  />
                   {isHackathon &&
-                    eligibility?.map((e) => {
+                    eligibilityQs?.map((e, i) => {
                       return (
-                        <FormControl key={e?.order} isRequired>
+                        <FormControl
+                          key={e?.order}
+                          isRequired={e.optional !== true}
+                        >
                           <QuestionHandler
+                            error={
+                              isHackathon && e.order === 1
+                                ? submissionLinkError
+                                : e.error
+                            }
+                            validate={(value: string) => {
+                              if (!isHackathon) return true;
+                              if (e.order === 1) {
+                                const valid = isYoutubeOrLoomLink(value);
+                                if (!valid) {
+                                  setSubmissionLinkError(
+                                    'Please enter a valid YouTube or Loom link',
+                                  );
+                                }
+                                return valid;
+                              } else if (value && e.isLink) {
+                                if (!isValidUrl(value) && eligibilityQs[i]) {
+                                  const cloneEligibilityQs = [...eligibilityQs];
+                                  const currElgibile = cloneEligibilityQs[i];
+                                  if (currElgibile) {
+                                    currElgibile.error =
+                                      'Please enter a valid link';
+                                    setEligibilityQs(cloneEligibilityQs);
+                                    return false;
+                                  }
+                                }
+                              }
+                              return true;
+                            }}
                             register={register}
                             question={e?.question}
                             label={`eligibility-${e?.order}`}
@@ -489,100 +440,58 @@ export const SubmissionModal = ({
                   </Text>
                 </FormControl>
               )}
-              <FormControl>
-                <FormLabel
-                  mb={0}
-                  color={'brand.slate.600'}
-                  fontWeight={600}
-                  htmlFor={'otherInfo'}
-                >
-                  Anything Else?
-                </FormLabel>
-                <FormHelperText mt={0} mb={2} color="brand.slate.500">
-                  If you have any other links or information you&apos;d like to
-                  share with us, please add them here!
-                </FormHelperText>
-                <AutoResizeTextarea
-                  borderColor={'brand.slate.300'}
-                  _placeholder={{ color: 'brand.slate.300' }}
-                  focusBorderColor="brand.purple"
-                  id="otherInfo"
-                  placeholder="Add info or link"
-                  {...register('otherInfo')}
-                  maxLength={2000}
-                />
-                <Text
-                  color={
-                    (watch('otherInfo')?.length || 0) > 1900
-                      ? 'red'
-                      : 'brand.slate.400'
-                  }
-                  fontSize={'xs'}
-                  textAlign="right"
-                >
-                  {watch('otherInfo')?.length > 1800 &&
-                    (2000 - (watch('otherInfo')?.length || 0) === 0 ? (
-                      <p>Character limit reached</p>
-                    ) : (
-                      <p>
-                        {2000 - (watch('otherInfo')?.length || 0)} characters
-                        left
-                      </p>
-                    ))}
-                </Text>
+              <TextAreaWithCounter
+                id="otherInfo"
+                label="Anything Else?"
+                helperText="If you have any other links or information you'd like to share with us, please add them here!"
+                placeholder="Add info or link"
+                register={register}
+                watch={watch}
+                maxLength={2000}
+                errors={errors}
+              />
 
-                <FormErrorMessage>
-                  {errors.otherInfo ? <>{errors.otherInfo.message}</> : <></>}
-                </FormErrorMessage>
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel
-                  mb={0}
-                  color={'brand.slate.600'}
-                  fontWeight={600}
-                  htmlFor={'publicKey'}
-                >
-                  Your Solana Wallet Address
-                </FormLabel>
-                <FormHelperText mt={0} mb={2} color="brand.slate.500">
-                  Add your Solana wallet address here. This is where you will
-                  receive your rewards if you win. Download{' '}
-                  <Text as="u">
-                    <Link href="https://backpack.app" isExternal>
-                      Backpack
-                    </Link>
-                  </Text>{' '}
-                  /{' '}
-                  <Text as="u">
-                    <Link href="https://solflare.com" isExternal>
-                      Solflare
-                    </Link>
-                  </Text>{' '}
-                  if you don&apos;t have a Solana wallet
-                </FormHelperText>
-                <Input
-                  borderColor={'brand.slate.300'}
-                  _placeholder={{ color: 'brand.slate.300' }}
-                  focusBorderColor="brand.purple"
-                  id="publicKey"
-                  placeholder="Add your Solana wallet address"
-                  {...register('publicKey', { validate: validateSolAddress })}
-                  defaultValue={userInfo?.publicKey}
-                  maxLength={54}
-                />
-                <Text mt={1} ml={1} color="red" fontSize="14px">
-                  {publicKeyError}
-                </Text>
-              </FormControl>
+              <TextInputWithHelper
+                id="publicKey"
+                label="Your Solana Wallet Address"
+                helperText={
+                  <>
+                    Add your Solana wallet address here. This is where you will
+                    receive your rewards if you win. Download{' '}
+                    <Text as="u">
+                      <Link href="https://backpack.app" isExternal>
+                        Backpack
+                      </Link>
+                    </Text>{' '}
+                    /{' '}
+                    <Text as="u">
+                      <Link href="https://solflare.com" isExternal>
+                        Solflare
+                      </Link>
+                    </Text>{' '}
+                    if you don&apos;t have a Solana wallet
+                  </>
+                }
+                placeholder="Add your Solana wallet address"
+                register={register}
+                errors={errors}
+                validate={(address: string) =>
+                  validateSolAddress(address, setPublicKeyError)
+                }
+                defaultValue={userInfo?.publicKey}
+              />
+              <Text mt={1} ml={1} color="red" fontSize="14px">
+                {publicKeyError}
+              </Text>
             </VStack>
             {!!error && (
               <Text align="center" mb={2} color="red">
                 Sorry! An error occurred while submitting. <br />
-                Please try again or contact us at hello@superteamearn.com
+                Please try again or contact us at support@superteamearn.com
               </Text>
             )}
             <Button
+              className="ph-no-capture"
               w={'full'}
               isLoading={!!isLoading}
               loadingText="Submitting..."
@@ -591,8 +500,34 @@ export const SubmissionModal = ({
             >
               {!isProject ? 'Submit' : 'Apply'}
             </Button>
+            <Text
+              mt={2}
+              color="brand.slate.400"
+              fontSize="sm"
+              textAlign="center"
+            >
+              By submitting/applying to this listing, you agree to our{' '}
+              <Link
+                textDecoration={'underline'}
+                onClick={() => setIsTOSModalOpen(true)}
+                rel="noopener noreferrer"
+                target="_blank"
+                textUnderlineOffset={2}
+              >
+                Terms of Use
+              </Link>
+              .
+            </Text>
           </form>
         </VStack>
+        {listing?.sponsor?.name && (
+          <SubmissionTerms
+            entityName={listing.sponsor.entityName}
+            isOpen={isTOSModalOpen}
+            onClose={() => setIsTOSModalOpen(false)}
+            sponsorName={listing.sponsor.name}
+          />
+        )}
       </ModalContent>
     </Modal>
   );

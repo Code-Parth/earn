@@ -1,6 +1,7 @@
 import { SearchIcon } from '@chakra-ui/icons';
 import {
   AbsoluteCenter,
+  Box,
   Button,
   Divider,
   Flex,
@@ -15,16 +16,12 @@ import {
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import React from 'react';
 
 import { UserMenu } from '@/components/shared/UserMenu';
 
-import {
-  CATEGORY_NAV_ITEMS,
-  HACKATHON_NAV_ITEMS,
-  LISTING_NAV_ITEMS,
-  renderLabel,
-} from '../constants';
+import { LISTING_NAV_ITEMS } from '../constants';
 import { NavLink } from './NavLink';
 
 interface Props {
@@ -35,21 +32,23 @@ interface Props {
 export const DesktopNavbar = ({ onLoginOpen, onSearchOpen }: Props) => {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const posthog = usePostHog();
 
   const isDashboardRoute = router.pathname.startsWith('/dashboard');
   const maxWValue = isDashboardRoute ? '' : '8xl';
 
   return (
     <Flex
-      display={{ base: 'none', xl: 'flex' }}
+      display={{ base: 'none', lg: 'flex' }}
       px={{ base: '2', lg: 6 }}
       color="brand.slate.500"
       bg="white"
       borderBottom="1px solid"
       borderBottomColor="blackAlpha.200"
+      id="desktop-navbar"
     >
       <Flex justify={'space-between'} w="100%" maxW={maxWValue} mx="auto">
-        <Flex align="center" gap={{ base: 3, xl: 6 }}>
+        <Flex align="center" gap={{ base: 3, lg: 6 }}>
           <Link
             as={NextLink}
             alignItems={'center'}
@@ -58,6 +57,9 @@ export const DesktopNavbar = ({ onLoginOpen, onSearchOpen }: Props) => {
             mr={5}
             _hover={{ textDecoration: 'none' }}
             href="/"
+            onClick={() => {
+              posthog.capture('homepage logo click_universal');
+            }}
           >
             <Image
               h={5}
@@ -84,6 +86,7 @@ export const DesktopNavbar = ({ onLoginOpen, onSearchOpen }: Props) => {
 
           {router.pathname !== '/search' && (
             <Button
+              className="ph-no-capture"
               gap={2}
               color="brand.slate.400"
               fontWeight={400}
@@ -98,44 +101,58 @@ export const DesktopNavbar = ({ onLoginOpen, onSearchOpen }: Props) => {
               <SearchIcon />
             </Button>
           )}
-
-          {LISTING_NAV_ITEMS?.map((navItem) => {
-            const isCurrent = `${navItem.href}` === router.asPath;
-            return (
-              <NavLink
-                key={navItem.label}
-                href={navItem.href ?? '#'}
-                label={navItem.label}
-                isActive={isCurrent}
-              />
-            );
-          })}
         </Flex>
         <AbsoluteCenter>
           <Flex align="center" justify={'center'} flexGrow={1} h="full" ml={10}>
-            <Stack direction={'row'} h="full" spacing={7}>
-              {CATEGORY_NAV_ITEMS?.map((navItem) => {
+            <Stack
+              className="ph-no-capture"
+              direction={'row'}
+              h="full"
+              spacing={7}
+            >
+              {LISTING_NAV_ITEMS?.map((navItem) => {
                 const isCurrent = `${navItem.href}` === router.asPath;
                 return (
                   <NavLink
+                    className="ph-no-capture"
+                    onClick={() => {
+                      posthog.capture(navItem.posthog);
+                    }}
+                    key={navItem.label}
                     href={navItem.href ?? '#'}
                     label={navItem.label}
                     isActive={isCurrent}
-                    key={navItem.label}
                   />
                 );
               })}
-              {HACKATHON_NAV_ITEMS?.map((navItem) => {
+              <Link
+                as={NextLink}
+                alignItems="center"
+                display="flex"
+                href="/talent-olympics"
+              >
+                <Image
+                  h={12}
+                  pt={0.5}
+                  objectFit={'contain'}
+                  alt="Talent Olympics Nav Icon"
+                  src="/assets/hackathon/talent-olympics/nav.svg"
+                />
+              </Link>
+              {/* {HACKATHON_NAV_ITEMS?.map((navItem) => {
                 const isCurrent = `${navItem.href}` === router.asPath;
                 return (
                   <NavLink
+                    onClick={() => {
+                      posthog.capture(navItem.posthog);
+                    }}
                     key={navItem.label}
                     href={navItem.href ?? '#'}
                     label={renderLabel(navItem)}
                     isActive={isCurrent}
                   />
                 );
-              })}
+              })} */}
             </Stack>
           </Flex>
         </AbsoluteCenter>
@@ -158,22 +175,31 @@ export const DesktopNavbar = ({ onLoginOpen, onSearchOpen }: Props) => {
           {status === 'authenticated' && session && <UserMenu />}
 
           {status === 'unauthenticated' && !session && (
-            <HStack gap={2}>
+            <HStack className="ph-no-capture" gap={2}>
               <HStack gap={0}>
                 <Button
-                  color="#6366F1"
                   fontSize="xs"
-                  bg={'white'}
                   onClick={() => {
+                    posthog.capture('create a listing_navbar');
                     router.push('/sponsor');
                   }}
                   size="sm"
+                  variant={'ghost'}
                 >
-                  Create A Listing
+                  Become a Sponsor
+                  <Box
+                    display="block"
+                    w={1.5}
+                    h={1.5}
+                    ml={1.5}
+                    bg="#38BDF8"
+                    rounded="full"
+                  />
                 </Button>
                 <Button
                   fontSize="xs"
                   onClick={() => {
+                    posthog.capture('login_navbar');
                     onLoginOpen();
                   }}
                   size="sm"
@@ -188,6 +214,7 @@ export const DesktopNavbar = ({ onLoginOpen, onSearchOpen }: Props) => {
                 px={4}
                 fontSize="xs"
                 onClick={() => {
+                  posthog.capture('signup_navbar');
                   onLoginOpen();
                 }}
                 size="sm"

@@ -2,7 +2,8 @@ import axios from 'axios';
 import type { NextRouter } from 'next/router';
 import type { TransitionStartFunction } from 'react';
 
-import type { Bounty } from '@/features/listings';
+import { type Listing } from '@/features/listings';
+import logger from '@/lib/logger';
 
 export function serverSearch(
   startTransition: TransitionStartFunction,
@@ -47,10 +48,10 @@ export async function search(query: string, params?: SearchQuery) {
           ...params,
         },
       });
-      return resp.data as { bounties: Bounty[]; count: number };
+      return resp.data as { bounties: Listing[]; count: number };
     } else return undefined;
   } catch (err) {
-    console.log('search failed - ', err);
+    logger.error('search failed - ', err);
     return undefined;
   }
 }

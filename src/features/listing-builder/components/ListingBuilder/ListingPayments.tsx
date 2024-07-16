@@ -33,6 +33,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import debounce from 'lodash.debounce';
+import { usePostHog } from 'posthog-js/react';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
@@ -51,7 +52,6 @@ interface Token {
   icon: string;
   decimals: number;
   coingeckoSymbol: string;
-  livecoinwatchSymbol: string;
 }
 
 interface PrizeListInterface {
@@ -69,10 +69,6 @@ interface Props {
   isNewOrDraft?: boolean;
   type: 'bounty' | 'project' | 'hackathon';
   isDuplicating?: boolean;
-}
-interface SearchState {
-  searchTerm: string | undefined;
-  tokenImage: string | undefined;
 }
 
 export const ListingPayments = ({
@@ -95,8 +91,8 @@ export const ListingPayments = ({
   const [searchResults, setSearchResults] = useState<Token[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [selectedTokenIndex, setSelectedTokenIndex] = useState<number | null>(
-    null,
+  const [tokenImage, setTokenImage] = useState<string | undefined>(
+    tokenList.find((t) => t.tokenSymbol === form?.token)?.icon,
   );
 
   const { register, setValue, watch, control, handleSubmit, reset, getValues } =
@@ -118,10 +114,12 @@ export const ListingPayments = ({
   const token = watch('token');
   const rewards = watch('rewards');
 
-  const [searchState, setSearchState] = useState<SearchState>({
-    searchTerm: undefined,
-    tokenImage: tokenList.find((t) => t.tokenSymbol === token)?.icon,
-  });
+  const [searchTerm, setSearchTerm] = useState<string | undefined>(
+    tokenList.find((t) => t.tokenSymbol === token)?.tokenName,
+  );
+  const [selectedTokenIndex, setSelectedTokenIndex] = useState<number | null>(
+    null,
+  );
 
   const [debouncedRewardAmount, setDebouncedRewardAmount] =
     useState(rewardAmount);
@@ -154,11 +152,21 @@ export const ListingPayments = ({
         rewards: form?.rewards || undefined,
         token: form?.token || 'USDC',
       });
+
+      const initialToken = form?.token || 'USDC';
+      const selectedToken = tokenList.find(
+        (t) => t.tokenSymbol === initialToken,
+      );
+      setSearchTerm(selectedToken?.tokenName);
+      setTokenImage(selectedToken?.icon);
     }
-  }, [form]);
+  }, [form, reset, editable]);
 
   const handleTokenChange = (tokenSymbol: string | undefined) => {
     setValue('token', tokenSymbol);
+    const selectedToken = tokenList.find((t) => t.tokenSymbol === tokenSymbol);
+    setSearchTerm(selectedToken?.tokenName);
+    setTokenImage(selectedToken?.icon);
   };
 
   const handlePrizeValueChange = (prizeName: string, value: number) => {
@@ -188,10 +196,9 @@ export const ListingPayments = ({
   const validateRewardsData = () => {
     let errorMessage = '';
 
-    if (searchState.searchTerm) {
+    if (searchTerm) {
       const tokenSym = tokenList.find(
-        (t) =>
-          t.tokenName.toLowerCase() === searchState.searchTerm!.toLowerCase(),
+        (t) => t.tokenName.toLowerCase() === searchTerm!.toLowerCase(),
       );
       if (!tokenSym) {
         errorMessage = 'Please select a valid token';
@@ -212,6 +219,9 @@ export const ListingPayments = ({
         } else if (maxRewardAsk < minRewardAsk) {
           errorMessage =
             'The compensation range is incorrect; the maximum must be higher than the minimum. Please adjust it';
+        } else if (maxRewardAsk === minRewardAsk) {
+          errorMessage =
+            'The compensation range is incorrect; the maximum must be higher than the minimum. Please adjust it.';
         }
       }
     } else {
@@ -254,25 +264,16 @@ export const ListingPayments = ({
   };
 
   const handleSearch = (value: string) => {
-    setSearchState({ searchTerm: value, tokenImage: '' });
-    setIsOpen(true);
-    if (value === '') {
-      setSearchResults(tokenList);
-    } else {
-      const filteredResults = tokenList.filter((token) =>
-        token.tokenName.toLowerCase().includes(value.toLowerCase()),
-      );
-      setSearchResults(filteredResults);
-    }
+    setSearchTerm(value);
+    const filteredResults =
+      value === ''
+        ? tokenList
+        : tokenList.filter((token) =>
+            token.tokenName.toLowerCase().includes(value.toLowerCase()),
+          );
+    setSearchResults(filteredResults);
     setSelectedTokenIndex(null);
-  };
-
-  const handleSelectToken = (
-    tokenName: string | undefined,
-    icon: string | undefined,
-  ) => {
-    setSearchState({ searchTerm: tokenName, tokenImage: icon });
-    setIsOpen(false);
+    setIsOpen(true);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -302,6 +303,15 @@ export const ListingPayments = ({
     }
   };
 
+  const handleSelectToken = (
+    tokenName: string | undefined,
+    icon: string | undefined,
+  ) => {
+    setSearchTerm(tokenName);
+    setTokenImage(icon);
+    setIsOpen(false);
+  };
+
   const onSubmit = async (data: any) => {
     const errorMessage = validateRewardsData();
     let newState = { ...data };
@@ -316,6 +326,7 @@ export const ListingPayments = ({
     if (errorMessage) {
       setErrorMessage(errorMessage);
     } else {
+      posthog.capture('publish listing_sponsor');
       confirmOnOpen();
     }
   };
@@ -335,6 +346,8 @@ export const ListingPayments = ({
       compensationHelperText = 'Allow applicants to send quotes of any amount';
       break;
   }
+
+  const posthog = usePostHog();
 
   const isDraft = isNewOrDraft || isDuplicating;
 
@@ -450,46 +463,26 @@ export const ListingPayments = ({
             <ListingFormLabel>Select Token</ListingFormLabel>
             <InputGroup>
               {token && (
-                <>
-                  <InputLeftElement
-                    alignItems={'center'}
-                    justifyContent={'start'}
-                    ml={4}
-                  >
-                    <SearchIcon color="gray.300" mr={2} />
-                    {searchState.tokenImage === undefined ? (
-                      <Image
-                        w={'1.6rem'}
-                        alt={
-                          tokenList.find((t) => t.tokenSymbol === token)
-                            ?.tokenName
-                        }
-                        rounded={'full'}
-                        src={
-                          tokenList.find((t) => t.tokenSymbol === token)?.icon
-                        }
-                      />
-                    ) : searchState.tokenImage !== undefined &&
-                      searchState.tokenImage !== '' ? (
-                      <Image
-                        w={'1.6rem'}
-                        alt={searchState.searchTerm as string}
-                        rounded={'full'}
-                        src={searchState.tokenImage}
-                      />
-                    ) : (
-                      <></>
-                    )}
-                  </InputLeftElement>
-                </>
+                <InputLeftElement
+                  alignItems={'center'}
+                  justifyContent={'start'}
+                  ml={4}
+                >
+                  <SearchIcon color="gray.300" mr={2} />
+                  {tokenImage ? (
+                    <Image
+                      w={'1.6rem'}
+                      alt={searchTerm as string}
+                      rounded={'full'}
+                      src={tokenImage}
+                    />
+                  ) : (
+                    <></>
+                  )}
+                </InputLeftElement>
               )}
               <Input
-                pl={
-                  searchState.tokenImage !== undefined &&
-                  searchState.tokenImage !== ''
-                    ? '4.5rem'
-                    : '3rem'
-                }
+                pl={'4.5rem'}
                 color="gray.700"
                 fontSize="1rem"
                 fontWeight={500}
@@ -497,23 +490,16 @@ export const ListingPayments = ({
                 focusBorderColor="brand.purple"
                 onChange={(e) => handleSearch(e.target.value)}
                 onFocus={() => {
-                  if (
-                    (!searchState.searchTerm ||
-                      searchState.searchTerm === '') &&
-                    !editable
-                  ) {
+                  if (!editable) {
                     handleSearch('');
                   } else {
                     setIsOpen(true);
+                    handleSearch(searchTerm || '');
                   }
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="Search token"
-                value={
-                  searchState.searchTerm === undefined
-                    ? tokenList.find((t) => t.tokenSymbol === token)?.tokenName
-                    : (searchState.searchTerm as string)
-                }
+                value={searchTerm || ''}
               />
               <InputRightElement color="gray.700" fontSize="1rem">
                 <ChevronDownIcon />
@@ -693,6 +679,7 @@ export const ListingPayments = ({
             </Text>
             {isDraft && (
               <Button
+                className="ph-no-capture"
                 w="100%"
                 disabled={isListingPublishing}
                 isLoading={isListingPublishing}
@@ -703,12 +690,15 @@ export const ListingPayments = ({
               </Button>
             )}
             <Button
+              className="ph-no-capture"
               w="100%"
               isLoading={isDraftLoading}
               onClick={() => {
                 if (isDraft) {
+                  posthog.capture('save draft_sponsor');
                   handleSaveDraft();
                 } else {
+                  posthog.capture('edit listing_sponsor');
                   handleUpdateListing();
                 }
               }}

@@ -1,6 +1,5 @@
 import { useDisclosure } from '@chakra-ui/react';
 import axios from 'axios';
-import dayjs from 'dayjs';
 import { useAtom } from 'jotai';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
@@ -8,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { ErrorSection } from '@/components/shared/ErrorSection';
 import { SurveyModal } from '@/components/Survey';
 import { type MultiSelectOptions } from '@/constants';
-import { type Bounty, getListingDraftStatus } from '@/features/listings';
+import { getListingDraftStatus, type Listing } from '@/features/listings';
 import { userStore } from '@/store/user';
 
 import { useListingFormStore } from '../store';
@@ -26,7 +25,7 @@ import { ListingSuccessModal } from './ListingSuccessModal';
 import { hackathonSponsorAtom } from './SelectSponsor';
 
 interface Props {
-  listing?: Bounty;
+  listing?: Listing;
   editable?: boolean;
   type: 'bounty' | 'project' | 'hackathon';
   isDuplicating?: boolean;
@@ -45,7 +44,7 @@ const defaultStepList = [
     label: 'Basics',
     number: 2,
     mainHead: 'Create a Listing',
-    description: `Now let's learn a bit more about the work you need completed`,
+    description: "Now let's learn a bit more about the work you need completed",
   },
   {
     label: 'Description',
@@ -77,7 +76,7 @@ export function CreateListing({
 }: Props) {
   const router = useRouter();
   const { userInfo } = userStore();
-  const { form, updateState } = useListingFormStore();
+  const { form, initializeForm } = useListingFormStore();
 
   const listingDraftStatus = getListingDraftStatus(
     listing?.status,
@@ -100,6 +99,7 @@ export function CreateListing({
   );
 
   const [slug, setSlug] = useState<string>('');
+  const [isType, setType] = useState<string>('');
 
   const [isListingPublishing, setIsListingPublishing] =
     useState<boolean>(false);
@@ -114,67 +114,24 @@ export function CreateListing({
 
   const [hackathonSponsor, setHackathonSponsor] = useAtom(hackathonSponsorAtom);
 
-  const basePath = type === 'hackathon' ? 'hackathon' : 'bounties';
+  const basePath = type === 'hackathon' ? 'hackathon' : 'listings';
   const surveyId = '018c674f-7e49-0000-5097-f2affbdddb0d';
   const isNewOrDraft = listingDraftStatus === 'DRAFT' || newListing === true;
 
   useEffect(() => {
-    if (editable && !!listing) {
-      updateState({
-        id: listing.id,
-        title:
-          isDuplicating && listing?.title
-            ? `${listing.title} (2)`
-            : listing?.title,
-        slug:
-          isDuplicating && listing?.slug ? `${listing.slug}-2` : listing?.slug,
-        deadline:
-          !isDuplicating && listing?.deadline
-            ? dayjs(listing?.deadline).format('YYYY-MM-DDTHH:mm') || undefined
-            : undefined,
-        templateId: listing?.templateId,
-        pocSocials: listing?.pocSocials,
-        applicationType: listing?.applicationType || 'fixed',
-        timeToComplete: listing?.timeToComplete,
-        type: type,
-        region: listing?.region,
-        referredBy: listing?.referredBy,
-        requirements: listing?.requirements,
-        eligibility: (listing?.eligibility || [])?.map((e) => ({
-          order: e.order,
-          question: e.question,
-          type: e.type as 'text',
-          delete: true,
-          label: e.question,
-        })),
-        references: (listing?.references || [])?.map((e) => ({
-          order: e.order,
-          link: e.link,
-        })),
-        isPrivate: listing?.isPrivate,
-        skills: listing?.skills,
-        description: listing?.description,
-        publishedAt: listing?.publishedAt || undefined,
-        rewardAmount: listing?.rewardAmount || undefined,
-        rewards: listing?.rewards || undefined,
-        token: listing?.token || 'USDC',
-        compensationType: listing?.compensationType,
-        minRewardAsk: listing?.minRewardAsk || undefined,
-        maxRewardAsk: listing?.maxRewardAsk || undefined,
-      });
-    }
-  }, [editable, listing, isDuplicating]);
+    initializeForm(listing!, isDuplicating, type);
+  }, [initializeForm, listing, isDuplicating, type]);
 
   useEffect(() => {
     if (editable && type === 'hackathon' && listing?.sponsorId) {
       setHackathonSponsor(listing?.sponsorId);
     }
-  }, [editable]);
+  }, [editable, type, listing?.sponsorId, setHackathonSponsor]);
 
   const createAndPublishListing = async () => {
     setIsListingPublishing(true);
     try {
-      const newListing: Bounty = {
+      const newListing: Listing = {
         pocId: userInfo?.id ?? '',
         skills: form?.skills,
         title: form?.title,
@@ -186,8 +143,7 @@ export function CreateListing({
         pocSocials: form?.pocSocials,
         applicationType: form?.applicationType,
         timeToComplete: form?.timeToComplete,
-
-        description: form?.description || '',
+        description: form?.description,
         type,
         region: form?.region,
         referredBy: form?.referredBy,
@@ -209,7 +165,6 @@ export function CreateListing({
         maxRewardAsk: form?.maxRewardAsk,
         isPublished: true,
         isPrivate: form?.isPrivate,
-        publishedAt: new Date().toISOString(),
       };
 
       let api = `/api/${basePath}/create`;
@@ -220,7 +175,8 @@ export function CreateListing({
         ...newListing,
         ...(type === 'hackathon' ? { hackathonSponsor } : {}),
       });
-      setSlug(`/${result?.data?.type}/${result?.data?.slug}/`);
+      setSlug(result?.data?.slug ?? ('' as string));
+      setType(result?.data?.type ?? ('' as string));
       setIsListingPublishing(false);
       onOpen();
       if (!userInfo?.surveysShown || !(surveyId in userInfo.surveysShown)) {
@@ -238,7 +194,7 @@ export function CreateListing({
     if (editable && !isDuplicating) {
       api = `/api/${basePath}/update/${listing?.id}/`;
     }
-    let draft: Bounty = {
+    let draft: Listing = {
       pocId: userInfo?.id ?? '',
     };
     try {
@@ -319,6 +275,7 @@ export function CreateListing({
         <FormLayout setStep={setSteps} currentStep={steps} stepList={stepList}>
           {isOpen && (
             <ListingSuccessModal
+              type={isType}
               slug={slug}
               isOpen={isOpen}
               onClose={() => {}}

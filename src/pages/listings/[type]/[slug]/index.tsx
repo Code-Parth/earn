@@ -3,14 +3,15 @@ import axios from 'axios';
 import { useAtom } from 'jotai';
 import type { GetServerSideProps } from 'next';
 import Head from 'next/head';
+import { usePostHog } from 'posthog-js/react';
 import { useEffect, useState } from 'react';
 
 import { ErrorSection } from '@/components/shared/ErrorSection';
 import { Comments } from '@/features/comments';
 import {
-  type Bounty,
   DescriptionUI,
   getListingTypeLabel,
+  type Listing,
   ListingHeader,
   ListingWinners,
   RightSideBar,
@@ -21,11 +22,12 @@ import { Default } from '@/layouts/Default';
 import { getURL } from '@/utils/validUrl';
 
 interface BountyDetailsProps {
-  bounty: Bounty | null;
+  bounty: Listing | null;
 }
 
 function BountyDetails({ bounty: initialBounty }: BountyDetailsProps) {
   const [, setBountySnackbar] = useAtom(bountySnackbarAtom);
+  const posthog = usePostHog();
 
   const [bounty] = useState<typeof initialBounty>(initialBounty);
   const [submissionNumber, setSubmissionNumber] = useState<number>(0);
@@ -33,13 +35,21 @@ function BountyDetails({ bounty: initialBounty }: BountyDetailsProps) {
   const getSubmissionsCount = async () => {
     try {
       const submissionCountDetails = await axios.get(
-        `/api/submission/${bounty?.id}/count/`,
+        `/api/listings/${bounty?.id}/submission-count/`,
       );
       setSubmissionNumber(submissionCountDetails?.data || 0);
     } catch (e) {
       console.error(e);
     }
   };
+
+  useEffect(() => {
+    if (bounty?.type === 'bounty') {
+      posthog.capture('open_bounty');
+    } else if (bounty?.type === 'project') {
+      posthog.capture('open_project');
+    }
+  }, []);
 
   useEffect(() => {
     const fetchSubmissions = async () => {
@@ -58,17 +68,40 @@ function BountyDetails({ bounty: initialBounty }: BountyDetailsProps) {
   }, [bounty, submissionNumber]);
 
   const encodedTitle = encodeURIComponent(initialBounty?.title || '');
+  const ogImage = new URL(`${getURL()}api/dynamic-og/listing/`);
+
+  ogImage.searchParams.set('title', encodedTitle);
+  ogImage.searchParams.set(
+    'reward',
+    initialBounty?.rewardAmount?.toString() || '',
+  );
+  ogImage.searchParams.set('token', initialBounty?.token || '');
+  ogImage.searchParams.set('sponsor', initialBounty?.sponsor?.name || '');
+  ogImage.searchParams.set('logo', initialBounty?.sponsor?.logo || '');
+  ogImage.searchParams.set('type', initialBounty?.type || '');
+  ogImage.searchParams.set(
+    'compensationType',
+    initialBounty?.compensationType || '',
+  );
+  ogImage.searchParams.set(
+    'minRewardAsk',
+    initialBounty?.minRewardAsk?.toString() || '',
+  );
+  ogImage.searchParams.set(
+    'maxRewardAsk',
+    initialBounty?.maxRewardAsk?.toString() || '',
+  );
 
   return (
     <Default
       meta={
         <Head>
-          <title>{`Superteam Earn Bounty | ${
+          <title>{`Superteam Earn Listing | ${
             initialBounty?.title || 'Apply'
           } by ${initialBounty?.sponsor?.name}`}</title>
           <meta
             name="description"
-            content={`${getListingTypeLabel(initialBounty?.type ?? 'Bounty')} on Superteam Earn | ${
+            content={`${getListingTypeLabel(initialBounty?.type ?? 'Listing')} on Superteam Earn | ${
               initialBounty?.sponsor?.name
             } is seeking freelancers and builders ${
               initialBounty?.title
@@ -82,20 +115,14 @@ function BountyDetails({ bounty: initialBounty }: BountyDetailsProps) {
           />
           <meta
             property="og:title"
-            content={`${initialBounty?.title || 'Bounty'} | Superteam Earn`}
+            content={`${initialBounty?.title || 'Listing'} | Superteam Earn`}
           />
-          <meta
-            property="og:image"
-            content={`${getURL()}api/bounty-og/?title=${encodedTitle}&reward=${initialBounty?.rewardAmount}&token=${initialBounty?.token}&sponsor=${initialBounty?.sponsor?.name}&logo=${initialBounty?.sponsor?.logo}&type=${initialBounty?.type}&compensationType=${initialBounty?.compensationType}&minRewardAsk=${initialBounty?.minRewardAsk}&maxRewardAsk=${initialBounty?.maxRewardAsk}`}
-          />
+          <meta property="og:image" content={ogImage.toString()} />
           <meta
             name="twitter:title"
-            content={`${initialBounty?.title || 'Bounty'} | Superteam Earn`}
+            content={`${initialBounty?.title || 'Listing'} | Superteam Earn`}
           />
-          <meta
-            name="twitter:image"
-            content={`${getURL()}api/bounty-og/?title=${encodedTitle}&reward=${initialBounty?.rewardAmount}&token=${initialBounty?.token}&sponsor=${initialBounty?.sponsor?.name}&logo=${initialBounty?.sponsor?.logo}&type=${initialBounty?.type}&compensationType=${initialBounty?.compensationType}&minRewardAsk=${initialBounty?.minRewardAsk}&maxRewardAsk=${initialBounty?.maxRewardAsk}`}
-          />
+          <meta name="twitter:image" content={ogImage.toString()} />
           <meta name="twitter:card" content="summary_large_image" />
           <meta property="og:image:width" content="1200" />
           <meta property="og:image:height" content="630" />
@@ -159,9 +186,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
   let bountyData;
   try {
-    const bountyDetails = await axios.get(`${getURL()}api/bounties/${slug}`, {
-      params: { type },
-    });
+    const bountyDetails = await axios.get(
+      `${getURL()}api/sponsor-dashboard/${slug}`,
+      {
+        params: { type },
+      },
+    );
     bountyData = bountyDetails.data;
   } catch (e) {
     console.error(e);

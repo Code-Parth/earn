@@ -1,29 +1,31 @@
-import axios from 'axios';
 import type { NextApiResponse } from 'next';
 
 import { type NextApiRequestWithUser, withAuth } from '@/features/auth';
 import { sendEmailNotification } from '@/features/emails';
+import logger from '@/lib/logger';
 import { prisma } from '@/prisma';
+import { safeStringify } from '@/utils/safeStringify';
 
 async function submission(req: NextApiRequestWithUser, res: NextApiResponse) {
   const userId = req.userId;
-
   const { listingId, link, tweet, otherInfo, eligibilityAnswers, ask } =
     req.body;
+  logger.debug(`Request body: ${safeStringify(req.body)}`);
 
-  const existingSubmission = await prisma.submission.findFirst({
-    where: {
-      userId,
-      listingId,
-    },
-  });
-
-  if (existingSubmission) {
-    return res.status(400).json({
-      message: 'Submission already exists for this user and listing.',
-    });
-  }
   try {
+    const existingSubmission = await prisma.submission.findFirst({
+      where: {
+        userId,
+        listingId,
+      },
+    });
+
+    if (existingSubmission) {
+      return res.status(400).json({
+        message: 'Submission already exists for this user and listing.',
+      });
+    }
+
     const result = await prisma.submission.create({
       data: {
         userId: userId as string,
@@ -45,9 +47,10 @@ async function submission(req: NextApiRequestWithUser, res: NextApiResponse) {
         type: 'submissionTalent',
         id: listingId,
         userId: userId as string,
+        triggeredBy: userId,
       });
     } catch (err) {
-      console.log('Error in sending mail to User -', err);
+      logger.error('Error sending email to User:', err);
     }
 
     try {
@@ -55,26 +58,18 @@ async function submission(req: NextApiRequestWithUser, res: NextApiResponse) {
         type: 'submissionSponsor',
         id: listingId,
         userId: result?.listing?.pocId,
+        triggeredBy: userId,
       });
     } catch (err) {
-      console.log('Error in sending mail to Sponsor -', err);
-    }
-
-    try {
-      if (process.env.NEXT_PUBLIC_VERCEL_ENV === 'production') {
-        const zapierWebhookUrl = process.env.ZAPIER_SUBMISSION_WEBHOOK!;
-        await axios.post(zapierWebhookUrl, result);
-      }
-    } catch (err) {
-      console.log('Error with Zapier Webhook -', err);
+      logger.error('Error sending email to Sponsor:', err);
     }
 
     return res.status(200).json(result);
   } catch (error: any) {
-    console.error(`User ${userId} unable to submit`, error.message);
+    logger.error(`User ${userId} unable to submit: ${error.message}`);
     return res.status(400).json({
-      error,
-      message: 'Error occurred while adding a new submission.',
+      error: error.message,
+      message: `User ${userId} unable to submit, ${error.message}`,
     });
   }
 }

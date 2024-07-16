@@ -17,6 +17,7 @@ import axios from 'axios';
 import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import ReactSelect from 'react-select';
@@ -39,7 +40,7 @@ import {
   workType,
 } from '@/constants';
 import type { PoW } from '@/interface/pow';
-import { SkillList, type SubSkillsType } from '@/interface/skills';
+import { skillSubSkillMap, type SubSkillsType } from '@/interface/skills';
 import { Default } from '@/layouts/Default';
 import { Meta } from '@/layouts/Meta';
 import { userStore } from '@/store/user';
@@ -65,7 +66,6 @@ type FormData = {
   cryptoExperience?: string;
   workPrefernce?: string;
   currentEmployer?: string;
-  pow?: string;
   skills?: any;
   private: boolean;
   PoW?: PoW[];
@@ -130,6 +130,7 @@ export default function EditProfilePage({ slug }: { slug: string }) {
   const [isPhotoLoading, setIsPhotoLoading] = useState(true);
 
   const router = useRouter();
+  const posthog = usePostHog();
 
   const [pow, setPow] = useState<PoW[]>([]);
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
@@ -248,6 +249,7 @@ export default function EditProfilePage({ slug }: { slug: string }) {
   }, [userInfo?.id]);
 
   const onSubmit = async (data: FormData) => {
+    posthog.capture('confirm_edit profile');
     if (isInvalid) {
       return;
     }
@@ -305,22 +307,21 @@ export default function EditProfilePage({ slug }: { slug: string }) {
       const communityJSON = JSON.stringify(communityArray);
 
       const combinedSkills = skills.map((mainskill) => {
-        const main = SkillList.find(
-          (skill) => skill.mainskill === mainskill.value,
-        );
+        const main =
+          skillSubSkillMap[mainskill.value as keyof typeof skillSubSkillMap];
         const sub: SubSkillsType[] = [];
 
         subSkills.forEach((subskill) => {
           if (
             main &&
-            main.subskills.includes(subskill.value as SubSkillsType)
+            main.some((subSkillObj) => subSkillObj.value === subskill.value)
           ) {
             sub.push(subskill.value as SubSkillsType);
           }
         });
 
         return {
-          skills: main?.mainskill ?? '',
+          skills: mainskill.value,
           subskills: sub ?? [],
         };
       });
@@ -751,6 +752,7 @@ export default function EditProfilePage({ slug }: { slug: string }) {
                 <br />
 
                 <Button
+                  className="ph-no-capture"
                   mb={12}
                   isLoading={uploading || isLoading}
                   type="submit"

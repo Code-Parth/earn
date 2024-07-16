@@ -15,17 +15,19 @@ import {
   Text,
 } from '@chakra-ui/react';
 import axios from 'axios';
-import dayjs from 'dayjs';
+import { usePostHog } from 'posthog-js/react';
 import { useEffect, useState } from 'react';
 
-import { type Bounty } from '@/features/listings';
+import { dayjs } from '@/utils/dayjs';
+
+import { type Listing } from '../../types';
 
 interface Props {
   onClose: () => void;
   isOpen: boolean;
   totalWinners: number;
   totalPaymentsMade: number;
-  bounty: Bounty | null;
+  bounty: Listing | null;
 }
 
 export function PublishResults({
@@ -39,6 +41,7 @@ export function PublishResults({
   const [isWinnersAnnounced, setIsWinnersAnnounced] = useState(
     bounty?.isWinnersAnnounced,
   );
+  const posthog = usePostHog();
   const isDeadlinePassed = dayjs().isAfter(bounty?.deadline);
 
   const rewards = Object.keys(bounty?.rewards || {});
@@ -72,7 +75,7 @@ export function PublishResults({
     if (!bounty?.id) return;
     setIsPublishingResults(true);
     try {
-      await axios.post(`/api/bounties/announce/${bounty?.id}/`);
+      await axios.post(`/api/listings/announce/${bounty?.id}/`);
       setIsWinnersAnnounced(true);
       setIsPublishingResults(false);
     } catch (e) {
@@ -166,6 +169,7 @@ export function PublishResults({
                 Close
               </Button>
               <Button
+                className="ph-no-capture"
                 ml={4}
                 isDisabled={
                   (rewards?.length && totalWinners !== rewards?.length) ||
@@ -173,7 +177,10 @@ export function PublishResults({
                 }
                 isLoading={isPublishingResults}
                 loadingText={'Publishing...'}
-                onClick={() => publishResults()}
+                onClick={() => {
+                  posthog.capture('announce winners_sponsor');
+                  publishResults();
+                }}
                 variant="solid"
               >
                 Publish

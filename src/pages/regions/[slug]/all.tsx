@@ -1,29 +1,26 @@
-import { Box, Flex } from '@chakra-ui/react';
+import { Box } from '@chakra-ui/react';
 import axios from 'axios';
 import type { NextPageContext } from 'next';
 import { useEffect, useState } from 'react';
 
-import { EmptySection } from '@/components/shared/EmptySection';
 import { Superteams } from '@/constants/Superteam';
-import {
-  type Bounty,
-  ListingCard,
-  ListingCardSkeleton,
-  ListingSection,
-} from '@/features/listings';
+import { type Listing, ListingTabs } from '@/features/listings';
 import { Home } from '@/layouts/Home';
 import { Meta } from '@/layouts/Meta';
+import { getURL } from '@/utils/validUrl';
 
 interface Listings {
-  bounties?: Bounty[];
+  bounties?: Listing[];
 }
 
 export default function AllRegionListingsPage({
   slug,
   displayName,
+  st,
 }: {
   slug: string;
   displayName: string;
+  st: (typeof Superteams)[0];
 }) {
   const [isListingsLoading, setIsListingsLoading] = useState(true);
   const [listings, setListings] = useState<Listings>({
@@ -48,37 +45,27 @@ export default function AllRegionListingsPage({
     getListings();
   }, []);
 
+  const ogImage = new URL(`${getURL()}api/dynamic-og/region/`);
+  ogImage.searchParams.set('region', st.region);
+  ogImage.searchParams.set('code', st.code!);
+
   return (
-    <Home type="home">
+    <Home type="region" st={st}>
       <Meta
         title={`Welcome to Superteam Earn ${displayName} | Discover Bounties and Grants`}
         description={`Welcome to Superteam ${displayName}'s page — Discover bounties and grants and become a part of the global crypto community`}
         canonical={`https://earn.superteam.fun/regions/${slug}/`}
+        og={ogImage.toString()}
       />
       <Box w={'100%'}>
-        <ListingSection
-          type="bounties"
-          title={'Freelance Gigs'}
-          sub="Bite sized tasks for freelancers"
+        <ListingTabs
+          bounties={listings.bounties}
+          isListingsLoading={isListingsLoading}
           emoji="/assets/home/emojis/moneyman.png"
-        >
-          {isListingsLoading &&
-            Array.from({ length: 8 }, (_, index) => (
-              <ListingCardSkeleton key={index} />
-            ))}
-          {!isListingsLoading && !listings?.bounties?.length && (
-            <Flex align="center" justify="center" mt={8}>
-              <EmptySection
-                title="No listings available!"
-                message="Subscribe to notifications to get notified about new listings."
-              />
-            </Flex>
-          )}
-          {!isListingsLoading &&
-            listings?.bounties?.map((bounty) => {
-              return <ListingCard key={bounty.id} bounty={bounty} />;
-            })}
-        </ListingSection>
+          title="Freelance Gigs"
+          viewAllLink="/all"
+          checkLanguage
+        />
       </Box>
     </Home>
   );
@@ -101,6 +88,6 @@ export async function getServerSideProps(context: NextPageContext) {
   }
 
   return {
-    props: { slug, displayName },
+    props: { slug, displayName, st },
   };
 }

@@ -6,7 +6,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
 import { LoadingSection } from '@/components/shared/LoadingSection';
-import { type Bounty, PublishResults } from '@/features/listings';
+import { type Listing, PublishResults } from '@/features/listings';
 import {
   SubmissionDetails,
   SubmissionHeader,
@@ -25,7 +25,7 @@ function BountySubmissions({ listing }: Props) {
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { userInfo } = userStore();
-  const [bounty, setBounty] = useState<Bounty | null>(null);
+  const [bounty, setBounty] = useState<Listing | null>(null);
   const [totalSubmissions, setTotalSubmissions] = useState(0);
   const [totalWinners, setTotalWinners] = useState(0);
   const [totalPaymentsMade, setTotalPaymentsMade] = useState(0);
@@ -40,10 +40,14 @@ function BountySubmissions({ listing }: Props) {
 
   const [usedPositions, setUsedPositions] = useState<string[]>([]);
 
+  useEffect(() => {}, [bounty]);
+
   const getBounty = async () => {
     setIsBountyLoading(true);
     try {
-      const bountyDetails = await axios.get(`/api/bounties/${listing}/`);
+      const bountyDetails = await axios.get(
+        `/api/sponsor-dashboard/${listing}/listing?type=hackathon`,
+      );
       setBounty(bountyDetails.data);
       if (bountyDetails.data.hackathonId !== userInfo?.hackathonId) {
         router.push(`/dashboard/hackathon/`);
@@ -70,7 +74,7 @@ function BountySubmissions({ listing }: Props) {
   const getSubmissions = async () => {
     try {
       const submissionDetails = await axios.get(
-        `/api/bounties/${listing}/submissions`,
+        `/api/sponsor-dashboard/${listing}/submissions`,
         {
           params: {
             searchText,

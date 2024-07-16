@@ -1,98 +1,44 @@
 import type { NextApiResponse } from 'next';
 
 import { type NextApiRequestWithUser, withAuth } from '@/features/auth';
-import {
-  type MainSkills,
-  SkillList,
-  type SubSkillsType,
-} from '@/interface/skills';
+import logger from '@/lib/logger';
 import { prisma } from '@/prisma';
-
-const uniqueArray = (arr: SubSkillsType[]): SubSkillsType[] => {
-  return Array.from(new Set(arr));
-};
-
-const correctSkills = (
-  skillObjArray: { skills: MainSkills; subskills: SubSkillsType[] }[],
-): { skills: MainSkills; subskills: SubSkillsType[] }[] => {
-  const correctedSkills: { skills: MainSkills; subskills: SubSkillsType[] }[] =
-    [];
-  const skillMap: Record<MainSkills, SubSkillsType[]> = {} as Record<
-    MainSkills,
-    SubSkillsType[]
-  >;
-
-  skillObjArray.forEach((skillObj) => {
-    if (!skillMap[skillObj.skills]) {
-      skillMap[skillObj.skills] = [];
-    }
-    skillObj.subskills.forEach((subskill) => {
-      const correctMainSkill = SkillList.find((s) =>
-        s.subskills.includes(subskill),
-      );
-
-      if (correctMainSkill) {
-        skillMap[correctMainSkill.mainskill].push(subskill);
-      }
-    });
-  });
-
-  Object.keys(skillMap).forEach((key) => {
-    correctedSkills.push({
-      skills: key as MainSkills,
-      subskills: uniqueArray(skillMap[key as MainSkills]),
-    });
-  });
-
-  return correctedSkills;
-};
+import { filterAllowedFields } from '@/utils/filterAllowedFields';
+import { safeStringify } from '@/utils/safeStringify';
 
 async function handler(req: NextApiRequestWithUser, res: NextApiResponse) {
   const userId = req.userId;
 
-  const user = await prisma.user.findUnique({
-    where: {
-      id: userId as string,
-    },
-  });
+  logger.debug(`Request body: ${safeStringify(req.body)}`);
 
-  // eslint-disable-next-line
-  const { role, skills, currentSponsorId, generateTalentEmailSettings, ...updateAttributes } = req.body;
-  let result;
-  const correctedSkills = skills ? correctSkills(skills) : [];
   try {
-    const updatedData = {
-      ...updateAttributes,
-    };
+    const user = await prisma.user.findUnique({
+      where: { id: userId as string },
+    });
 
-    if (skills) {
-      updatedData.skills = correctedSkills;
+    if (!user) {
+      logger.warn(`User not found for user ID: ${userId}`);
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    if (user && user.role === 'GOD' && currentSponsorId) {
-      updatedData.currentSponsorId = currentSponsorId;
+    const allowedFields = ['featureModalShown', 'publicKey', 'acceptedTOS'];
+
+    if (user.role === 'GOD') {
+      allowedFields.push('currentSponsorId', 'hackathonId');
     }
 
-    if (generateTalentEmailSettings) {
-      const categories = new Set();
+    const updatedData = filterAllowedFields(req.body, allowedFields);
 
-      categories.add('createListing');
-      categories.add('commentOrLikeSubmission');
-      categories.add('weeklyListingRoundup');
-      categories.add('replyOrTagComment');
-      categories.add('productAndNewsletter');
-
-      for (const category of categories) {
-        await prisma.emailSettings.create({
-          data: {
-            user: { connect: { id: userId as string } },
-            category: category as string,
-          },
-        });
-      }
+    if (Object.keys(updatedData).length === 0) {
+      logger.warn(`No valid fields provided for update for user ID: ${userId}`);
+      return res
+        .status(400)
+        .json({ error: 'No valid fields provided for update' });
     }
 
-    result = await prisma.user.update({
+    logger.info(`Updating user with data: ${safeStringify(updatedData)}`);
+
+    const result = await prisma.user.update({
       where: {
         id: userId as string,
       },
@@ -106,12 +52,14 @@ async function handler(req: NextApiRequestWithUser, res: NextApiResponse) {
       },
     });
 
+    logger.info(`User updated successfully for user ID: ${userId}`);
     return res.status(200).json(result);
   } catch (error: any) {
-    console.error(`User ${userId} unable to onboard`, error.message);
-
+    logger.error(
+      `Error occurred while updating user ${userId}: ${safeStringify(error)}`,
+    );
     return res.status(400).json({
-      message: `Error occurred while updating user ${userId}.`,
+      message: `Error occurred while updating user ${userId}: ${error.message}`,
     });
   }
 }

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { LoadingSection } from '@/components/shared/LoadingSection';
 import { CreateListing } from '@/features/listing-builder';
-import type { Bounty } from '@/features/listings';
+import type { Listing } from '@/features/listings';
 import { Sidebar } from '@/layouts/Sponsor';
 import { userStore } from '@/store/user';
 
@@ -17,12 +17,14 @@ export default function DuplicateBounty({ slug }: Props) {
   const router = useRouter();
   const { userInfo } = userStore();
   const [isBountyLoading, setIsBountyLoading] = useState(true);
-  const [bounty, setBounty] = useState<Bounty | undefined>();
+  const [bounty, setBounty] = useState<Listing | undefined>();
 
   const getBounty = async () => {
     setIsBountyLoading(true);
     try {
-      const bountyDetails = await axios.get(`/api/bounties/${slug}/`);
+      const bountyDetails = await axios.get(
+        `/api/sponsor-dashboard/${slug}/listing`,
+      );
       if (bountyDetails.data.sponsorId !== userInfo?.currentSponsorId) {
         router.push('/dashboard/listings');
       } else {

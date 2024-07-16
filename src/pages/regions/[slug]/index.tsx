@@ -6,21 +6,24 @@ import React, { useEffect, useState } from 'react';
 import { EmptySection } from '@/components/shared/EmptySection';
 import { Loading } from '@/components/shared/Loading';
 import { Superteams } from '@/constants/Superteam';
-import { type Grant, GrantsCard } from '@/features/grants';
-import { type Bounty, ListingSection, ListingTabs } from '@/features/listings';
+import { GrantsCard, type GrantWithApplicationCount } from '@/features/grants';
+import { type Listing, ListingSection, ListingTabs } from '@/features/listings';
 import { Home } from '@/layouts/Home';
 import { Meta } from '@/layouts/Meta';
+import { getURL } from '@/utils/validUrl';
 
 interface Listings {
-  bounties?: Bounty[];
-  grants?: Grant[];
+  bounties?: Listing[];
+  grants?: GrantWithApplicationCount[];
 }
 const RegionsPage = ({
   slug,
   displayName,
+  st,
 }: {
   slug: string;
   displayName: string;
+  st: (typeof Superteams)[0];
 }) => {
   const [isListingsLoading, setIsListingsLoading] = useState(true);
   const [listings, setListings] = useState<Listings>({
@@ -48,13 +51,18 @@ const RegionsPage = ({
     getListings();
   }, []);
 
+  const ogImage = new URL(`${getURL()}api/dynamic-og/region/`);
+  ogImage.searchParams.set('region', st.displayValue);
+  ogImage.searchParams.set('code', st.code!);
+
   return (
     <>
-      <Home type="region">
+      <Home type="region" st={st}>
         <Meta
           title={`Welcome to Superteam Earn ${displayName} | Discover Bounties and Grants`}
           description={`Welcome to Superteam ${displayName}'s page — Discover bounties and grants and become a part of the global crypto community`}
           canonical={`https://earn.superteam.fun/regions/${slug}/`}
+          og={ogImage.toString()}
         />
         <Box w={'100%'}>
           <ListingTabs
@@ -72,7 +80,6 @@ const RegionsPage = ({
             title="Grants"
             sub="Equity-free funding opportunities for builders"
             emoji="/assets/home/emojis/grants.png"
-            showViewAll
           >
             {isListingsLoading && (
               <Flex
@@ -120,7 +127,7 @@ export async function getServerSideProps(context: NextPageContext) {
   }
 
   return {
-    props: { slug, displayName },
+    props: { slug, displayName, st },
   };
 }
 

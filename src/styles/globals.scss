@@ -46,7 +46,11 @@ body {
 }
 
 #reset-des a {
-  all: revert !important;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  color: blue;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 #reset-des ul {
@@ -97,11 +101,11 @@ body {
 
 #reset-des pre {
   white-space: pre-wrap;
-  word-break: break-all; 
+  word-break: break-all;
 }
 
 #reset-des p {
-  white-space: pre-wrap; 
+  white-space: pre-wrap;
 }
 
 code {

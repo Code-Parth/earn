@@ -1,3 +1,4 @@
+import { InfoOutlineIcon } from '@chakra-ui/icons';
 import {
   Box,
   Button,
@@ -8,11 +9,13 @@ import {
   HStack,
   Input,
   Text,
+  Tooltip,
   VStack,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
+import { usePostHog } from 'posthog-js/react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import Select from 'react-select';
@@ -46,6 +49,7 @@ const CreateSponsor = () => {
   const [loginStep, setLoginStep] = useState(0);
 
   const { userInfo } = userStore();
+  const posthog = usePostHog();
 
   useEffect(() => {
     if (userInfo?.currentSponsorId && session?.user?.role !== 'GOD') {
@@ -64,7 +68,7 @@ const CreateSponsor = () => {
       await axios.post('/api/sponsors/create', {
         ...sponsor,
       });
-      await axios.post(`/api/email/manual/welcomeSponsor`);
+      await axios.post(`/api/email/manual/welcome-sponsor`);
       router.push('/dashboard/listings?open=1');
     } catch (e: any) {
       if (e?.response?.data?.error?.code === 'P2002') {
@@ -146,6 +150,7 @@ const CreateSponsor = () => {
           <VStack w={'2xl'} pt={10}>
             <form
               onSubmit={handleSubmit(async (e) => {
+                posthog.capture('complete profile_sponsor');
                 createNewSponsor({
                   bio: e.bio,
                   industry: industries ?? '',
@@ -154,6 +159,7 @@ const CreateSponsor = () => {
                   logo: imageUrl ?? '',
                   twitter: e.twitterHandle,
                   url: e.sponsorurl ?? '',
+                  entityName: e.entityName,
                 });
               })}
               style={{ width: '100%' }}
@@ -260,8 +266,50 @@ const CreateSponsor = () => {
                   </FormErrorMessage>
                 </FormControl>
               </HStack>
+              <HStack w="full">
+                <FormControl w={'full'} isRequired>
+                  <HStack mb={2}>
+                    <FormLabel
+                      m={0}
+                      color={'brand.slate.500'}
+                      fontSize={'15px'}
+                      fontWeight={600}
+                      htmlFor={'entityName'}
+                    >
+                      Entity Name
+                    </FormLabel>
+                    <Tooltip
+                      fontSize="xs"
+                      label="Please mention the official entity name of your project. If you are a DAO, simply mention the name of the DAO. If you neither have an entity nor are a DAO, mention your full name."
+                    >
+                      <InfoOutlineIcon
+                        color="brand.slate.500"
+                        w={3}
+                        h={3}
+                        display={{ base: 'none', md: 'block' }}
+                      />
+                    </Tooltip>
+                  </HStack>
+                  <Input
+                    w={'full'}
+                    borderColor={'brand.slate.300'}
+                    _placeholder={{ color: 'brand.slate.300' }}
+                    focusBorderColor="brand.purple"
+                    id="entityName"
+                    placeholder="Full Entity Name"
+                    {...register('entityName')}
+                  />
+                  <FormErrorMessage>
+                    {errors.entityName ? (
+                      <>{errors.entityName.message}</>
+                    ) : (
+                      <></>
+                    )}
+                  </FormErrorMessage>
+                </FormControl>
+              </HStack>
               {
-                <VStack align={'start'} gap={2} my={3}>
+                <VStack align={'start'} gap={2} mt={6} mb={3}>
                   <Heading
                     color={'brand.slate.500'}
                     fontSize={'15px'}
@@ -365,6 +413,7 @@ const CreateSponsor = () => {
                   </Text>
                 )}
                 <Button
+                  className="ph-no-capture"
                   w="full"
                   isDisabled={imageUrl === ''}
                   isLoading={!!isLoading}
