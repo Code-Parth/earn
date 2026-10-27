@@ -215,20 +215,18 @@ export async function POST(request: NextRequest) {
       'productAndNewsletter',
     ]);
 
-    for (const category of categories) {
-      await prisma.emailSettings.deleteMany({
+    // One transaction, so a failed insert cannot leave the categories deleted.
+    await prisma.$transaction([
+      prisma.emailSettings.deleteMany({
         where: {
           userId,
-          category,
+          category: { in: [...categories] },
         },
-      });
-      await prisma.emailSettings.create({
-        data: {
-          user: { connect: { id: userId } },
-          category,
-        },
-      });
-    }
+      }),
+      prisma.emailSettings.createMany({
+        data: [...categories].map((category) => ({ userId, category })),
+      }),
+    ]);
 
     logger.info(
       `Completing user profile for user ID: ${userId}; fields: ${Object.keys(updatedData).join(', ')}`,
